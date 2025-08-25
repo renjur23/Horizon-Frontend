@@ -20,7 +20,7 @@ const GeneratorList = () => {
   const [prevPage, setPrevPage] = useState(null);
   const [count, setCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState(''); // ✅ Added search state
-  const pageSize = 10;
+  const pageSize = 20;
 
   const fetchGenerators = async (page = 1) => {
     try {
@@ -28,7 +28,7 @@ const GeneratorList = () => {
       setGenerators(res.data.results || []);
       setNextPage(res.data.next);
       setPrevPage(res.data.previous);
-      setCurrentPage(page);
+      setCurrentPage(Number(page));
       setCount(res.data.count || 0);
     } catch (error) {
       console.error(
@@ -81,18 +81,19 @@ const GeneratorList = () => {
   };
 
   const goToNextPage = () => {
-    if (nextPage) {
-      const nextPageNum = new URL(nextPage).searchParams.get('page');
-      fetchGenerators(nextPageNum);
-    }
-  };
+  if (nextPage) {
+    const nextPageNum = parseInt(new URL(nextPage).searchParams.get('page')) || currentPage + 1;
+    fetchGenerators(nextPageNum);
+  }
+};
 
-  const goToPrevPage = () => {
-    if (prevPage) {
-      const prevPageNum = new URL(prevPage).searchParams.get('page');
-      fetchGenerators(prevPageNum);
-    }
-  };
+const goToPrevPage = () => {
+  if (prevPage) {
+    const prevPageNum = parseInt(new URL(prevPage).searchParams.get('page')) || 1;
+    fetchGenerators(prevPageNum);
+  }
+};
+
 
   // ✅ Filtered generator list
   const filteredGenerators = generators.filter((gen) => {
@@ -192,7 +193,8 @@ const GeneratorList = () => {
                                 className="text-white"
                                 onClick={() => handleEdit(gen)}
                               >
-                                <Pencil size={16} />
+                               <i className="fas fa-pen"></i>
+
                               </MDBBtn>
                             </td>
                             <td className="text-center">
@@ -201,7 +203,7 @@ const GeneratorList = () => {
                                 color="danger"
                                 onClick={() => handleDelete(gen.id)}
                               >
-                                Delete
+                                 <i className="fas fa-trash"></i>
                               </MDBBtn>
                             </td>
                           </>
@@ -217,7 +219,7 @@ const GeneratorList = () => {
       </MDBCard>
 
       {/* Pagination */}
-      <div className="d-flex justify-between items-center px-2 mb-5">
+      <div className="d-flex justify-content-between items-center px-2 mb-5">
         <p className="text-muted">
           Showing {(currentPage - 1) * pageSize + 1} -{' '}
           {Math.min(currentPage * pageSize, count)} of {count}

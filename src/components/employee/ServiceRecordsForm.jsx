@@ -25,7 +25,7 @@ const ServiceRecordsForm = ({ token }) => {
   const [editingId, setEditingId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [count, setCount] = useState(0);
-  const pageSize = 5;
+  const pageSize = 20;
 
   // const handleDelete = (id) => {
   //   // Optionally, confirm with the user:
@@ -381,7 +381,8 @@ const ServiceRecordsForm = ({ token }) => {
                     onClick={() => handleEdit(record)}
                     className="btn btn-sm btn-outline-primary"
                   >
-                    <Pencil size={16} />
+                    <i className="fas fa-pen"></i>
+
                   </button>
                 </td>
                 <td>
@@ -389,7 +390,7 @@ const ServiceRecordsForm = ({ token }) => {
                     onClick={() => handleDelete(record.id)}
                     className="btn btn-sm btn-outline-danger"
                   >
-                    <Trash size={16} />
+                     <i className="fas fa-trash"></i>
                   </button>
                 </td>
               </tr>

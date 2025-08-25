@@ -24,7 +24,8 @@ const OrderListPage = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [totalPages, setTotalPages] = useState(1);
+
 
   useEffect(() => {
     fetchFilledOrders();
@@ -58,11 +59,11 @@ const OrderListPage = () => {
     }
   };
 
-  const fetchFilledOrders = async () => {
+  const fetchFilledOrders = async  (page = 1) => {
     try {
       const token = localStorage.getItem('access_token');
       const res = await axios.get(
-        `${import.meta.env.VITE_BASE_URL}/api/orders/`,
+        `${import.meta.env.VITE_BASE_URL}/api/orders/?page=${page}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -79,6 +80,8 @@ const OrderListPage = () => {
       );
 
       setOrders(filledOrders);
+      setTotalPages(Math.ceil(res.data.count / 20)); // use DRF's count
+      setCurrentPage(page);
     } catch (error) {
       console.error(error);
       setErrorMsg('Failed to fetch employee-filled orders.');
@@ -183,18 +186,15 @@ const handleSave = async () => {
     }
   };
 
-  // Filter and paginate
   const filteredOrders = orders.filter(
     (order) =>
       order.po_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.contract_no.toLowerCase().includes(searchQuery.toLowerCase())
+      order.contract_no.toLowerCase().includes(searchQuery.toLowerCase())||
+      (order.inverter_name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentOrders = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
 
+ 
   return (
     <div className="max-w-7xl mx-auto mt-10 px-4">
       <MDBCard className="shadow-sm mb-4">
@@ -210,7 +210,7 @@ const handleSave = async () => {
           <input
             type="text"
             className="form-control mb-3"
-            placeholder="Search by PO number or Contract number"
+            placeholder="Search by PO number, Inverter name or Contract number"
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -239,13 +239,13 @@ const handleSave = async () => {
                     <th>Remarks</th>
                     <th>Fuel Price</th>
                     <th>CO₂/litre</th>
-                    <th>Edit</th>
+                    <th>Actions</th>
                   </tr>
                 </MDBTableHead>
                 <MDBTableBody>
-                  {currentOrders.map((order, index) => (
+                  {filteredOrders.map((order, index) => (
                     <tr key={order.id}>
-                      <td>{indexOfFirstItem + index + 1}</td>
+                      <td>{(currentPage - 1) * 20 + index + 1}</td>
                       <td>{order.po_number}</td>
                       <td>{order.contract_no}</td>
 
@@ -374,14 +374,15 @@ const handleSave = async () => {
                               className="text-white"
                               onClick={() => handleEdit(order)}
                             >
-                              <Pencil size={16} />
+                             <i className="fas fa-pen"></i>
+
                             </MDBBtn>
                             <MDBBtn
                               size="sm"
                               color="danger"
                               onClick={() => handleDelete(order.id)}
                             >
-                              Delete
+                              <i className="fas fa-trash"></i>
                             </MDBBtn>
                           </td>
                         </>
@@ -400,7 +401,7 @@ const handleSave = async () => {
                   <MDBBtn
                     size="sm"
                     disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(currentPage - 1)}
+                    onClick={() =>  fetchFilledOrders(currentPage - 1)}
                     className="me-2"
                   >
                     Previous
@@ -408,7 +409,7 @@ const handleSave = async () => {
                   <MDBBtn
                     size="sm"
                     disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(currentPage + 1)}
+                    onClick={() => fetchFilledOrders(currentPage + 1)}
                   >
                     Next
                   </MDBBtn>

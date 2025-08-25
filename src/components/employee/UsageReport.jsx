@@ -1,17 +1,30 @@
-import React, { useEffect, useState } from "react";
+// src/components/reports/UsageReport.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import axiosInstance from "../../api/axiosInstance";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
   MDBContainer,
-  MDBInput,
   MDBBtn,
   MDBCard,
   MDBCardBody,
   MDBTable,
   MDBTableHead,
   MDBTableBody,
+  MDBIcon
 } from "mdb-react-ui-kit";
+
+// 🔹 Logos
+import logo from "../../assets/images/logo.png";
+import factoryIcon from "../../assets/images/factory.png";
+import co2Icon from "../../assets/images/co2.png";
+
+const itemsPerPage = 100;
+
+// ⚡ Constants
+const FUEL_CONS_PER_HR = 6.8;   // litres/hr
+const FUEL_PRICE = 1.25;        // €/litre
+const CO2_FACTOR = 2.68;        // kg/L
 
 const UsageReport = ({ token }) => {
   const [usages, setUsages] = useState([]);
@@ -19,360 +32,412 @@ const UsageReport = ({ token }) => {
   const [orders, setOrders] = useState([]);
   const [locations, setLocations] = useState([]);
   const [generators, setGenerators] = useState([]);
+
   const [selectedInverter, setSelectedInverter] = useState("");
+  const [filter, setFilter] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [filter, setFilter] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
+  const [search, setSearch] = useState("");
 
-  useEffect(() => { fetchAll(); }, []);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const [logoBase64, setLogoBase64] = useState("");
+  const [factoryBase64, setFactoryBase64] = useState("");
+  const [co2Base64, setCo2Base64] = useState("");
+
+  useEffect(() => {
+    fetchAll();
+    convertImageToBase64(logo, setLogoBase64);
+    convertImageToBase64(factoryIcon, setFactoryBase64);
+    convertImageToBase64(co2Icon, setCo2Base64);
+  }, []);
+
+  // 🔹 Fetch all pages
+  const fetchAllPages = async (url) => {
+    let results = [];
+    let nextUrl = url;
+    while (nextUrl) {
+      const res = await axiosInstance.get(nextUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      results = [...results, ...(res.data.results || res.data)];
+      nextUrl = res.data.next;
+    }
+    return results;
+  };
 
   const fetchAll = async () => {
     try {
-     const [invRes, ordRes, usageRes, locRes, genRes] = await Promise.all([
-
-        axiosInstance.get("/inverters/", { headers: { Authorization: `Bearer ${token}` } }),
-        axiosInstance.get("/orders/", { headers: { Authorization: `Bearer ${token}` } }),
-        axiosInstance.get("/usages/", { headers: { Authorization: `Bearer ${token}` } }),
-        axiosInstance.get("/locations/", { headers: { Authorization: `Bearer ${token}` } }),    // ✅ NEW
-        axiosInstance.get("/generators/", { headers: { Authorization: `Bearer ${token}` } }),   // ✅ NEW
+      const [invRes, ordRes, usageRes, locRes, genRes] = await Promise.all([
+        fetchAllPages("/inverters/"),
+        fetchAllPages("/orders/"),
+        fetchAllPages("/usages/"),
+        fetchAllPages("/locations/"),
+        fetchAllPages("/generators/"),
       ]);
-      setInverters(invRes.data.results || invRes.data);
-      setOrders(ordRes.data.results || ordRes.data);
-      setUsages(usageRes.data.results || usageRes.data);
-      setLocations(locRes.data.results || locRes.data);     // ✅ NEW
-      setGenerators(genRes.data.results || genRes.data);    // ✅ NEW
-    } catch (err) { console.error("Fetch error:", err); }
+
+      setInverters(invRes);
+      setOrders(ordRes);
+      setUsages(usageRes);
+      setLocations(locRes);
+      setGenerators(genRes);
+    } catch (err) {
+      console.error("Fetch error:", err);
+    }
   };
 
+  const clearFilters = () => {
+    setFilter("");
+    setSelectedInverter("");
+    setFromDate("");
+    setToDate("");
+    setSearch("");
+    setCurrentPage(1);
+  };
+
+  const convertImageToBase64 = (imagePath, setter) => {
+    fetch(imagePath)
+      .then((res) => res.blob())
+      .then((blob) => {
+        const reader = new FileReader();
+        reader.onloadend = () => setter(reader.result);
+        reader.readAsDataURL(blob);
+      })
+      .catch((err) => console.error("Image load error:", err));
+  };
+
+  // Filtering
+  const filteredUsages = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const minusHours = (h) => new Date(now.getTime() - h * 60 * 60 * 1000);
+
+    return (usages || []).filter((u) => {
+      const usageDate = new Date(u.date);
+      let ok = true;
+
+      // 🔹 Date filters
+      switch (filter) {
+        case "today":
+          ok = usageDate >= startOfToday;
+          break;
+        case "24h":
+          ok = usageDate >= minusHours(24);
+          break;
+        case "48h":
+          ok = usageDate >= minusHours(48);
+          break;
+        case "week":
+          ok = usageDate >= minusHours(24 * 7);
+          break;
+        case "month":
+          ok = usageDate >= minusHours(24 * 30);
+          break;
+        default:
+          ok = true;
+      }
+      if (!ok) return false;
+
+      if (selectedInverter && u.inverter_id !== selectedInverter) return false;
+
+      if (fromDate) {
+        const from = new Date(fromDate);
+        if (usageDate < from) return false;
+      }
+      if (toDate) {
+        const to = new Date(toDate);
+        to.setHours(23, 59, 59, 999);
+        if (usageDate > to) return false;
+      }
+
+      // 🔹 Search (inverter, PO, generator)
+      if (search) {
+        const inverter = inverters.find((i) => i.id === u.inverter_id);
+        const order = orders.find((o) => o.id === u.order_id);
+        const generator = generators.find((g) => g.id === u.generator_id);
+
+        const haystack = [
+          inverter?.unit_id,
+          inverter?.given_name,
+          order?.po_number,
+          generator?.serial_number,
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        if (!haystack.includes(search.toLowerCase())) return false;
+      }
+
+      return true;
+    });
+  }, [usages, filter, selectedInverter, fromDate, toDate, search, inverters, orders, generators]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredUsages.length / itemsPerPage) || 1;
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentUsages = filteredUsages.slice(indexOfFirstItem, indexOfLastItem);
+
+  // ----------------- PDF export -----------------
+  const downloadPDF = () => {
+    if (!filteredUsages.length) return;
+
+    const doc = new jsPDF("p", "mm", "a4");
+    const first = filteredUsages[0];
+
+    // Lookup related
+    const inverter = inverters.find(inv => inv.id === first.inverter_id);
+    const order = orders.find(o => o.id === first.order_id);
+   
+    
+
+    // Totals
+    const totalKW = filteredUsages.reduce((s, u) => s + (u.kw_consumed || 0), 0);
+    const totalGenHrSaved = filteredUsages.reduce((s, u) => s + (u.generator_run_hour_save || 0), 0);
+    const totalSiteHours = filteredUsages.reduce((s, u) => s + (u.site_run_hour || 0), 0);
+
+    const fuelSaved = totalGenHrSaved * FUEL_CONS_PER_HR;
+    const savingsEuro = fuelSaved * FUEL_PRICE;
+    const co2Reduction = fuelSaved * CO2_FACTOR;
+    const batteryUsage = totalSiteHours ? ((totalGenHrSaved / totalSiteHours) * 100).toFixed(2) : 0;
+
+    const addHeader = () => {
+      if (logoBase64) doc.addImage(logoBase64, 14, 8, 25, 12);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text(
+        `Battery Usage Report - ${inverter?.unit_id || "Unknown Inverter"}`,
+        doc.internal.pageSize.getWidth() / 2,
+        15,
+        { align: "center" }
+      );
+      doc.setFontSize(10);
+      doc.text(`PO Number: ${order?.po_number || "-"}`, 14, 28);
+      doc.text(`Location: ${first.location_name || order?.location_name || "-"}`, 14, 34);
+      doc.text(`Inverter No: ${inverter?.unit_id || "-"}`, 100, 28);
+      doc.text(`Given Name: ${inverter?.given_name || "-"}`, 100, 34);
+      doc.text(`Generator No: ${first.generator_no || "-"}`, 14, 40);
+    };
+
+    // Table
+    const tableData = filteredUsages.map((u) => [
+      new Date(u.date).toLocaleDateString("en-GB"),
+      inverters.find((inv) => inv.id === u.inverter_id)?.unit_id || "-",
+      orders.find((o) => o.id === u.order_id)?.po_number || "-",
+      u.kw_consumed,
+      u.generator_run_hour,
+      u.site_run_hour,
+      u.generator_run_hour_save,
+      u.inverter_usage_calculated,
+    ]);
+
+    autoTable(doc, {
+      startY: 50,
+      head: [["Date", "Inverter", "PO", "kW", "Gen Hr", "Site Hr", "Saved Hr", "Usage %"]],
+      body: tableData,
+      styles: { fontSize: 9 },
+      theme: "grid",
+      margin: { left: 14, right: 14 },
+      didDrawPage: (data) => {
+        if (data.pageNumber === 1) addHeader();
+      },
+    });
+
+    // 📊 Styled Summary Table
+    // 📊 Styled Summary Table with icons (compact size)
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 12,
+      head: [["Metric", "Value"]],
+      body: [
+          [" Power Consumed", `${totalKW.toFixed(1)} kW`],
+          ["Gen Hours Saved", `${totalGenHrSaved.toFixed(1)} h`],
+          ["Fuel Saved", `${fuelSaved.toFixed(1)} L`],
+          ["Fuel Savings", `€${savingsEuro.toFixed(2)}`],
+          ["CO₂ Reduction", `${co2Reduction.toFixed(1)} kg`],
+          [" Battery Usage", `${batteryUsage}%`],
+      ],
+      styles: { fontSize: 9, cellPadding: 2 },   // smaller font + tighter padding
+      headStyles: { fillColor: [0, 128, 0], textColor: [255, 255, 255], halign: "center" },
+      bodyStyles: { halign: "center" },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      theme: "grid",
+      margin: { left: 40, right: 40 },           // narrower margins
+      columnStyles: { 
+        0: { halign: "left", cellWidth: 80 },    // metric column smaller
+        1: { halign: "center", cellWidth: 60 },  // value column smaller
+      },
+    });
+
+
+    // ✅ Footer with correct page numbers
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(9);
+      doc.setTextColor(100);
+      doc.text(new Date().toLocaleDateString("en-GB"), 14, 290);
+      doc.text(`Page ${i} of ${pageCount}`, 200 - 14, 290, { align: "right" });
+    }
+
+    doc.save(`${inverter?.unit_id || "Report"}.pdf`);
+  };
+
+  // Excel upload handler
   const handleExcelUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const uploadData = new FormData();
-    uploadData.append("file", file);
+    const formData = new FormData();
+    formData.append("file", file);
 
     try {
-      await axiosInstance.post("/usages-upload/", uploadData, {
+      await axiosInstance.post("/usages/upload_excel/", formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
         },
       });
+
+      alert("✅ Excel file uploaded successfully!");
       fetchAll();
     } catch (err) {
-      console.error("Upload failed:", err);
+      console.error("Excel upload failed:", err);
+      alert("❌ Failed to upload Excel file. Please try again.");
     }
-  };
-
-  const filteredUsages = usages.filter((u) => {
-    const usageDate = new Date(u.date);
-    const now = new Date();
-    let match = true;
-
-    if (filter) {
-      let threshold;
-      switch (filter) {
-        case "today": match = usageDate.toDateString() === now.toDateString(); break;
-        case "week": threshold = new Date(); threshold.setDate(now.getDate() - 7); match = usageDate >= threshold; break;
-        case "month": threshold = new Date(); threshold.setMonth(now.getMonth() - 1); match = usageDate >= threshold; break;
-        default: match = true;
-      }
-    }
-
-    if (selectedInverter && u.inverter_id !== selectedInverter) match = false;
-    if (fromDate && usageDate < new Date(fromDate)) match = false;
-    if (toDate) {
-      const to = new Date(toDate);
-      to.setHours(23, 59, 59);
-      if (usageDate > to) match = false;
-    }
-    return match;
-  });
-
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentUsages = filteredUsages.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredUsages.length / itemsPerPage);
-
-  const downloadPDF = () => {
-    if (!filteredUsages.length) return;
-    
- 
-    const FUEL_CONSUMPTION_PER_HOUR = 12;
-    const CO2_PER_LITRE = 2.678;
-    const doc = new jsPDF("p", "mm", "a4");
-    const first = filteredUsages[0];
-    const fuelPrice = first?.order_id?.fuel_price || 1.25;
-
-    const inverter = first?.inverter_given_name || first?.inverter_id;
-    const fileName = `${(inverter || "report").replace(/\s+/g, "_")}.pdf`;
-
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    doc.text("Battery Usage Report", doc.internal.pageSize.getWidth() / 2, 20, { align: "center" });
-    doc.setFontSize(10);
-    let y = 28;
-    doc.text(`PO Number   : ${first?.po_number || "-"}`, 14, y);
-    doc.text(`Unit ID     : ${first?.inverter_unit_id || "-"}`, 100, y); y += 6;
-    doc.text(`Location    : ${first?.location_name || "-"}`, 14, y);
-    doc.text(`Given Name  : ${first?.inverter_given_name || "-"}`, 100, y); y += 6;
-    doc.text(`Generator No: ${first?.generator_no || "-"}`, 14, y);
-
-    
-
-    let totalKW = 0, totalSavedHrs = 0, totalFuelSaved = 0, totalFuelCost = 0, totalCO2 = 0, totalSiteHrs = 0;
-    const tableData = filteredUsages.map((u) => {
-      const kw = +u.kw_consumed;
-      const genHr = +u.generator_run_hour;
-      const siteHr = +u.site_run_hour;
-      const savedHr = siteHr - genHr;
-      const batteryUsage = (savedHr / siteHr) * 100;
-      const fuelSaved = savedHr * FUEL_CONSUMPTION_PER_HOUR;
-      const fuelCost = fuelSaved * fuelPrice;
-      const co2 = fuelSaved * CO2_PER_LITRE;
-
-      totalKW += kw;
-      totalSavedHrs += savedHr;
-      totalFuelSaved += fuelSaved;
-      totalFuelCost += fuelCost;
-      totalCO2 += co2;
-      totalSiteHrs += siteHr;
-
-      return [new Date(u.date).toLocaleDateString(), kw.toFixed(2), genHr.toFixed(2), savedHr.toFixed(2), `${batteryUsage.toFixed(2)}%`, fuelSaved.toFixed(2), `€${fuelCost.toFixed(2)}`, co2.toFixed(2)];
-    });
-
-    autoTable(doc, {
-      startY: 48,
-      head: [["Date", "KW", "Gen Hr", "Saved Hr", "Battery Usage %", "Fuel Saved", "Fuel €", "CO₂"]],
-      body: tableData,
-      margin: { bottom: 30 },
-    });
-
-    const avgBatteryUsage = totalSiteHrs > 0 ? (totalSavedHrs / totalSiteHrs) * 100 : 0;
-    const numberOfDays = new Set(filteredUsages.map(u => new Date(u.date).toDateString())).size;
-    const reductionPercent = totalSiteHrs > 0 ? (totalSavedHrs / totalSiteHrs) * 100 : 0;
-
-    let finalY = doc.lastAutoTable.finalY + 80;
-    doc.setFillColor(193, 245, 193);
-    doc.rect(14, finalY, 182, 30, 'F');
-    doc.setTextColor(60);
-    doc.setFontSize(11);
-
-    const leftX = 16, midX = 80;
-    const rightLabelX = 120;  // 👈 Shifted right to give enough space
-    const rightValueX = 170;
-    let line = finalY + 7;
-    doc.text("Power Consumed :", leftX, line);
-    doc.text(`${totalKW.toFixed(0)}`, leftX + 65, line);
-    doc.text("Fuel Saved :", rightLabelX, line);
-    doc.text(`${totalFuelSaved.toFixed(0)}`, rightValueX, line);
-
-    line += 7;
-    doc.text("Generator Running Hours Saved :", leftX, line);
-    doc.text(`${totalSavedHrs.toFixed(0)}`, leftX + 65, line);
-    doc.text("Savings On Fuel :", rightLabelX, line);
-    doc.text(`€${totalFuelCost.toFixed(2)}`, rightValueX, line);
-
-    line += 7;
-    doc.text("Reduced CO2 Emissions :", leftX, line);
-    doc.text(`${totalCO2.toFixed(1)}`, leftX + 65, line);
-    doc.text("Battery Usage %:",  rightLabelX, line);
-    doc.text(`${avgBatteryUsage.toFixed(2)}%`,rightValueX, line);
-
-
-
-
-
-
-const actualRunHrs = totalSiteHrs - totalSavedHrs;
-const normalFuel = totalSiteHrs * FUEL_CONSUMPTION_PER_HOUR;
-const hybridFuel = totalSavedHrs * FUEL_CONSUMPTION_PER_HOUR;
-const conventionalCost = normalFuel * fuelPrice;
-const hybridCost = hybridFuel * fuelPrice;
-const fuelReduction = normalFuel - hybridFuel;
-const costReduction = conventionalCost - hybridCost;
-
-const waveColor = [200, 255, 200];
-const boxWidth = 88;
-
-let boxY = line + 15;
-
-// --- LEFT BOX CONTENT ---
-doc.setFontSize(12);
-doc.setTextColor(0);
-doc.text("Reduction in run-hours", 14 + boxWidth / 2, boxY + 7, { align: "center" });
-doc.setFontSize(16);
-doc.setTextColor(0, 150, 0);
-doc.text(`${reductionPercent.toFixed(2)}%`, 14 + boxWidth / 2, boxY + 15, { align: "center" });
-
-let tableYLeft = boxY + 20;
-
-// draw table first (to get height)
-autoTable(doc, {
-  startY: tableYLeft,
-  margin: { left: 14 },
-  body: [
-    ['Number of days', `${numberOfDays}`],
-    ['Fuel consumption per hour', `${FUEL_CONSUMPTION_PER_HOUR} L`],
-    ['Cost of fuel per litre', `€${fuelPrice.toFixed(2)}`],
-    ['Normal run-hours for this period', `${totalSiteHrs.toFixed(0)}`],
-    ['Actual run-hours for this period', `${actualRunHrs.toFixed(0)}`],
-    ['Reduction in run-hours for this period', `${totalSavedHrs.toFixed(0)}`],
-  ],
-  styles: { fontSize: 8, halign: 'left', cellPadding: 0.5 },
-  head: [],
-  theme: 'grid',
-  tableWidth: 80,
-  tableLineWidth: 0,
-});
-
-// get height of left table
-const leftTableHeight = doc.lastAutoTable.finalY - boxY;
-
-// draw green box behind it
-doc.setFillColor(...waveColor);
-doc.roundedRect(14, boxY, boxWidth, leftTableHeight + 10, 8, 8, 'F');
-
-// redraw text over the box
-doc.setTextColor(0);
-doc.setFontSize(12);
-doc.text("Reduction in run-hours", 14 + boxWidth / 2, boxY + 7, { align: "center" });
-doc.setFontSize(16);
-doc.setTextColor(0, 150, 0);
-doc.text(`${reductionPercent.toFixed(2)}%`, 14 + boxWidth / 2, boxY + 15, { align: "center" });
-
-// redraw table
-autoTable(doc, {
-  startY: tableYLeft,
-  margin: { left: 14 },
-  body: [
-    ['Number of days', `${numberOfDays}`],
-    ['Fuel consumption per hour', `${FUEL_CONSUMPTION_PER_HOUR} L`],
-    ['Cost of fuel per litre', `€${fuelPrice.toFixed(2)}`],
-    ['Normal run-hours for this period', `${totalSiteHrs.toFixed(0)}`],
-    ['Actual run-hours for this period', `${actualRunHrs.toFixed(0)}`],
-    ['Reduction in run-hours for this period', `${totalSavedHrs.toFixed(0)}`],
-  ],
-  styles: { fontSize: 8, halign: 'left', cellPadding: 0.5 },
-  head: [],
-  theme: 'grid',
-  tableWidth: 80,
-  tableLineWidth: 0,
-});
-
-// --- RIGHT BOX CONTENT ---
-doc.setTextColor(0);
-doc.setFontSize(12);
-doc.text("Reduction in fuel consumed", 112 + boxWidth / 2, boxY + 7, { align: "center" });
-doc.setFontSize(16);
-doc.setTextColor(0, 150, 0);
-doc.text(`${reductionPercent.toFixed(2)}%`, 112 + boxWidth / 2, boxY + 15, { align: "center" });
-
-let tableYRight = boxY + 20;
-
-// draw right table first
-autoTable(doc, {
-  startY: tableYRight,
-  margin: { left: 112 },
-  head: [['', 'Run-time (hrs)', 'Cost (€)']],
-  body: [
-    ['Conventional generator', `${normalFuel.toFixed(0)}`, `€${conventionalCost.toFixed(2)}`],
-    ['Hybrid generator', `${hybridFuel.toFixed(0)}`, `€${hybridCost.toFixed(2)}`],
-    ['Fuel saved', `${fuelReduction.toFixed(0)}`, `€${costReduction.toFixed(2)}`],
-  ],
-  styles: { fontSize: 8, halign: 'center', cellPadding: 0.5 },
-  headStyles: { fillColor: [230, 230, 230] },
-  theme: 'grid',
-  tableWidth: 80,
-});
-
-// get right table height
-const rightTableHeight = doc.lastAutoTable.finalY - boxY;
-
-// draw green box behind it
-doc.setFillColor(...waveColor);
-doc.roundedRect(112, boxY, boxWidth, rightTableHeight + 10, 8, 8, 'F');
-
-// redraw text over the box
-doc.setTextColor(0);
-doc.setFontSize(12);
-doc.text("Reduction in fuel consumed", 112 + boxWidth / 2, boxY + 7, { align: "center" });
-doc.setFontSize(16);
-doc.setTextColor(0, 150, 0);
-doc.text(`${reductionPercent.toFixed(2)}%`, 112 + boxWidth / 2, boxY + 15, { align: "center" });
-
-// redraw table
-autoTable(doc, {
-  startY: tableYRight,
-  margin: { left: 112 },
-  head: [['', 'Run-time (hrs)', 'Cost (€)']],
-  body: [
-    ['Conventional generator', `${normalFuel.toFixed(0)}`, `€${conventionalCost.toFixed(2)}`],
-    ['Hybrid generator', `${hybridFuel.toFixed(0)}`, `€${hybridCost.toFixed(2)}`],
-    ['Fuel saved', `${fuelReduction.toFixed(0)}`, `€${costReduction.toFixed(2)}`],
-  ],
-  styles: { fontSize: 8, halign: 'center', cellPadding: 0.5 },
-  headStyles: { fillColor: [230, 230, 230] },
-  theme: 'grid',
-  tableWidth: 80,
-});
-
-
-
-    doc.save(fileName);
   };
 
   return (
     <MDBContainer className="py-4">
+      {/* Upload */}
       <MDBCard className="mb-4">
-        <MDBCardBody>
-          <h5 className="mb-3">📅 Upload Usage Excel</h5>
-          <input type="file" className="form-control mb-3" accept=".xlsx,.xls,.xlsm" onChange={handleExcelUpload} />
+        <MDBCardBody className="d-flex flex-wrap gap-3 align-items-end">
+          <div>
+            <label className="form-label">📎 Upload Usage Excel</label>
+            <input
+              type="file"
+              className="form-control"
+              accept=".xlsx,.xls,.xlsm"
+              onChange={handleExcelUpload}
+            />
+          </div>
         </MDBCardBody>
       </MDBCard>
 
+      {/* Filters */}
       <div className="d-flex flex-wrap gap-3 mb-3 align-items-end">
+        {/* 🔹 Search box */}
+        <div>
+          <label className="form-label">Search</label>
+          <input
+            type="text"
+            className="form-control"
+            placeholder="Search inverter, po number"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
+          />
+        </div>
+
         <div>
           <label className="form-label">Filter</label>
-          <select className="form-select" value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <select
+            className="form-select"
+            value={filter}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
             <option value="">All</option>
             <option value="today">Today</option>
+            <option value="24h">Last 24 Hours</option>
+            <option value="48h">Last 48 Hours</option>
             <option value="week">Last 1 Week</option>
             <option value="month">Last 1 Month</option>
           </select>
         </div>
+
+        {/* Inverter dropdown */}
         <div>
           <label className="form-label">Inverter</label>
-          <select className="form-select" value={selectedInverter} onChange={(e) => setSelectedInverter(e.target.value)}>
+          <select
+            className="form-select"
+            value={selectedInverter}
+            onChange={(e) => {
+              setSelectedInverter(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
             <option value="">All Inverters</option>
-            {inverters.map((inv) => <option key={inv.id} value={inv.id}>{inv.unit_id}</option>)}
+            {inverters.map((inv) => (
+              <option key={inv.id} value={inv.id}>
+                {inv.unit_id}
+              </option>
+            ))}
           </select>
         </div>
+
+        {/* Date range */}
         <div>
           <label className="form-label">From Date</label>
-          <input type="date" className="form-control" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          <input
+            type="date"
+            className="form-control"
+            value={fromDate}
+            onChange={(e) => {
+              setFromDate(e.target.value);
+              setCurrentPage(1);
+            }}
+          />
         </div>
+
         <div>
           <label className="form-label">To Date</label>
-          <input type="date" className="form-control" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          <input
+            type="date"
+            className="form-control"
+            value={toDate}
+            onChange={(e) => {
+              setToDate(e.target.value);
+              setCurrentPage(1);
+            }}
+          />
         </div>
-        <MDBBtn color="secondary" onClick={() => { setFilter(""); setSelectedInverter(""); setFromDate(""); setToDate(""); setCurrentPage(1); }}>Clear</MDBBtn>
-        <MDBBtn color="danger" onClick={downloadPDF}>Download PDF</MDBBtn>
+
+        <MDBBtn color="secondary" onClick={clearFilters}>
+          Clear
+        </MDBBtn>
+        <MDBBtn color="danger" onClick={downloadPDF}>
+          Download PDF
+        </MDBBtn>
       </div>
 
+      {/* Table */}
       <MDBTable responsive striped small bordered>
         <MDBTableHead>
-          <tr><th>#</th><th>Date</th><th>Inverter</th><th>PO</th><th>kW</th><th>Gen Hr</th><th>Site Hr</th><th>Usage %</th><th>Saved Hr</th></tr>
+          <tr>
+            <th>No</th>
+            <th>Date</th>
+            <th>Inverter</th>
+            <th>PO</th>
+            
+            <th>kW</th>
+            <th>Gen Hr</th>
+            <th>Site Hr</th>
+            <th>Usage %</th>
+            <th>Saved Hr</th>
+          </tr>
         </MDBTableHead>
         <MDBTableBody>
           {currentUsages.map((u, i) => (
             <tr key={u.id}>
               <td>{indexOfFirstItem + i + 1}</td>
-              <td>{new Date(u.date).toLocaleDateString()}</td>
-              <td>{inverters.find((inv) => inv.id === u.inverter_id)?.unit_id}</td>
-              <td>{orders.find((o) => o.id === u.order_id)?.po_number}</td>
+              <td>{new Date(u.date).toLocaleDateString("en-GB")}</td>
+              <td>{inverters.find((inv) => inv.id === u.inverter_id)?.unit_id || "-"}</td>
+              <td>{orders.find((o) => o.id === u.order_id)?.po_number || "-"}</td>
+              
               <td>{u.kw_consumed}</td>
               <td>{u.generator_run_hour}</td>
               <td>{u.site_run_hour}</td>
@@ -380,20 +445,35 @@ autoTable(doc, {
               <td>{u.generator_run_hour_save}</td>
             </tr>
           ))}
-        
-      </MDBTableBody>
-    </MDBTable>
+        </MDBTableBody>
+      </MDBTable>
 
-    <div className="d-flex justify-content-between align-items-center mt-3">
-      <p className="mb-0">Page {currentPage} of {totalPages}</p>
-      <div>
-        <MDBBtn size="sm" color="primary" disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>⬅ Previous</MDBBtn>{" "}
-        <MDBBtn size="sm" color="primary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>Next ➡</MDBBtn>
+      {/* Pagination */}
+      <div className="d-flex justify-content-between align-items-center mt-3">
+        <p className="mb-0">
+          Page {currentPage} of {totalPages}
+        </p>
+        <div>
+          <MDBBtn
+            size="sm"
+            color="primary"
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+          >
+            ⬅ Previous
+          </MDBBtn>{" "}
+          <MDBBtn
+            size="sm"
+            color="primary"
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+          >
+            Next ➡
+          </MDBBtn>
+        </div>
       </div>
-    </div>
     </MDBContainer>
-);
-
-}
+  );
+};
 
 export default UsageReport;

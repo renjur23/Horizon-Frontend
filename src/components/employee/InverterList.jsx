@@ -21,21 +21,21 @@ const InverterList = () => {
   const [prevPage, setPrevPage] = useState(null);
   const [count, setCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
-  const pageSize = 10;
+  const pageSize = 20;
 
   useEffect(() => {
     fetchInverters();
     fetchStatuses();
   }, []);
 
-  const fetchInverters = async (page = 1) => {
+  const fetchInverters = async (page = 1, query = '') => {
     try {
-      const response = await axiosInstance.get(`/inverters/?page=${page}`);
+      const response = await axiosInstance.get(`/inverters/?page=${page || 1}&search=${query}`);
       setInverters(response.data.results || []);
       setNextPage(response.data.next);
       setPrevPage(response.data.previous);
       setCount(response.data.count || 0);
-      setCurrentPage(page);
+      setCurrentPage(Number(page));
     } catch (error) {
       console.error('Failed to fetch inverters:', error);
     }
@@ -100,53 +100,54 @@ const InverterList = () => {
     }
   };
 
-  const goToNextPage = () => {
-    if (nextPage) {
-      const nextPageNum = new URL(nextPage).searchParams.get('page');
-      fetchInverters(nextPageNum);
-    }
-  };
+const goToNextPage = () => {
+  const totalPages = Math.ceil(count / pageSize); 
+  if (currentPage < totalPages) {
+    fetchInverters(currentPage + 1);
+  }
+};
 
-  const goToPrevPage = () => {
-    if (prevPage) {
-      const prevPageNum = new URL(prevPage).searchParams.get('page');
-      fetchInverters(prevPageNum);
-    }
-  };
+const goToPrevPage = () => {
+  if (currentPage > 1) {
+    fetchInverters(currentPage - 1);
+  }
+};
+
+
 
   const getSortableUnitId = (unit_id) => {
     const match = unit_id?.match(/(\d+\/\d+|\d+)/); // Match formats like "10/46" or "176"
     return match ? match[0] : unit_id;
   };
 
-  const filteredInverters = [...inverters]
-    .sort((a, b) =>
-      getSortableUnitId(a.unit_id).localeCompare(
-        getSortableUnitId(b.unit_id),
-        undefined,
-        { numeric: true }
-      )
-    )
-    .filter((inv) => {
-      const query = searchQuery.toLowerCase();
-      return (
-        String(inv.unit_id || '')
-          .toLowerCase()
-          .includes(query) ||
-        String(inv.model || '')
-          .toLowerCase()
-          .includes(query) ||
-        String(inv.given_name || '')
-          .toLowerCase()
-          .includes(query) ||
-        String(inv.serial_no || '')
-          .toLowerCase()
-          .includes(query) ||
-        String(inv.inverter_status || '')
-          .toLowerCase()
-          .includes(query)
-      );
-    });
+ const sortedInverters = [...inverters].sort((a, b) =>
+  getSortableUnitId(a.unit_id).localeCompare(
+    getSortableUnitId(b.unit_id),
+    undefined,
+    { numeric: true }
+  )
+);
+
+    // .filter((inv) => {
+    //   const query = searchQuery.toLowerCase();
+    //   return (
+    //     String(inv.unit_id || '')
+    //       .toLowerCase()
+    //       .includes(query) ||
+    //     String(inv.model || '')
+    //       .toLowerCase()
+    //       .includes(query) ||
+    //     String(inv.given_name || '')
+    //       .toLowerCase()
+    //       .includes(query) ||
+    //     String(inv.serial_no || '')
+    //       .toLowerCase()
+    //       .includes(query) ||
+    //     String(inv.inverter_status || '')
+    //       .toLowerCase()
+    //       .includes(query)
+    //   );
+    // });
 
   return (
     <div className="max-w-7xl mx-auto px-4 mt-8">
@@ -162,10 +163,12 @@ const InverterList = () => {
             placeholder="Search by Unit ID, Model, Name, Serial No or Status"
             className="form-control mb-3"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {setSearchQuery(e.target.value);
+            fetchInverters(1, e.target.value); 
+            }}
           />
 
-          {filteredInverters.length === 0 ? (
+          {sortedInverters.length === 0 ? (
             <p className="text-muted text-center">No inverters found.</p>
           ) : (
             <div className="table-responsive">
@@ -184,7 +187,8 @@ const InverterList = () => {
                   </tr>
                 </MDBTableHead>
                 <MDBTableBody>
-                  {filteredInverters.map((inv, index) => {
+                  {sortedInverters.map((inv, index) => {
+ 
                     const serialNumber =
                       (currentPage - 1) * pageSize + index + 1;
                     return (
@@ -277,7 +281,8 @@ const InverterList = () => {
                                 className="text-white"
                                 onClick={() => handleEdit(inv)}
                               >
-                                <Pencil size={16} />
+                                <i className="fas fa-pen"></i>
+
                               </MDBBtn>
                             </td>
                             <td className="text-center">
@@ -286,7 +291,7 @@ const InverterList = () => {
                                 color="danger"
                                 onClick={() => handleDelete(inv.id)}
                               >
-                                Delete
+                               <i className="fas fa-trash"></i>
                               </MDBBtn>
                             </td>
                           </>
@@ -302,10 +307,9 @@ const InverterList = () => {
       </MDBCard>
 
       {/* Pagination */}
-      <div className="d-flex justify-between items-center px-2 mb-5">
+      <div className="d-flex justify-content-between items-center px-2 mb-5">
         <p className="text-muted">
-          Showing {(currentPage - 1) * pageSize + 1} -{' '}
-          {Math.min(currentPage * pageSize, count)} of {count}
+            Page {currentPage} of {Math.ceil(count / pageSize)}
         </p>
         <div className="d-flex gap-2">
           <MDBBtn

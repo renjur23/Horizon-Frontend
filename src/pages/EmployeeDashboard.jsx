@@ -257,7 +257,7 @@ const EmployeeDashboard = () => {
               'inverter-utilization': 'Inverter Utilization',
               'service-status': 'Service Status',
               'add-service-record': 'Add Service Record',
-              'upload-usage': 'Upload Usage Excel',
+              'upload-usage': 'Usage  Report',
               'check-list': ' Checklist',
             }[activeTab]
           }

@@ -233,7 +233,8 @@ const SiteContactList = () => {
                           onClick={() => handleEditClick(contact)}
                           className="text-white"
                         >
-                          <Pencil size={16} />
+                          <i className="fas fa-pen"></i>
+
                         </MDBBtn>
                       )}
                       <MDBBtn
@@ -241,7 +242,7 @@ const SiteContactList = () => {
                         color="danger"
                         onClick={() => handleDeleteContact(contact.id)}
                       >
-                        Delete
+                        <i className="fas fa-trash"></i>
                       </MDBBtn>
                     </td>
                   </tr>

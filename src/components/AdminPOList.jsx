@@ -27,6 +27,7 @@ const AdminPOList = () => {
   const [inverters, setInverters] = useState([]);
   const [generators, setGenerators] = useState([]);
   const [siteContacts, setSiteContacts] = useState([]);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
   useEffect(() => {
     fetchOrders();
@@ -44,7 +45,7 @@ const AdminPOList = () => {
       setNextPage(response.data.next);
       setPrevPage(response.data.previous);
       setCount(response.data.count || 0);
-      setCurrentPage(page);
+      setCurrentPage(Number(page));
     } catch (error) {
       console.error('Error fetching orders:', error);
     }
@@ -120,26 +121,27 @@ const AdminPOList = () => {
     }
   };
 
-  const goToNextPage = () => {
-    if (nextPage) {
-      const page = new URL(nextPage).searchParams.get('page');
-      fetchOrders(page);
-    }
-  };
+ const goToNextPage = () => {
+  const totalPages = Math.ceil(count / pageSize); 
+  if (currentPage < totalPages) {
+    fetchOrders(currentPage + 1);
+  }
+};
 
-  const goToPrevPage = () => {
-    if (prevPage) {
-      const page = new URL(prevPage).searchParams.get('page');
-      fetchOrders(page);
-    }
-  };
+const goToPrevPage = () => {
+  if (currentPage > 1) {
+    fetchOrders(currentPage - 1);
+  }
+};
+
 
   const filteredOrders = orders.filter((order) => {
     const query = searchQuery.toLowerCase();
     return (
       order.po_number?.toLowerCase().includes(query) ||
       order.contract_no?.toLowerCase().includes(query) ||
-      order.remarks?.toLowerCase().includes(query)
+      order.remarks?.toLowerCase().includes(query)||
+      (order.inverter_name || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
 
@@ -156,10 +158,50 @@ const AdminPOList = () => {
   }
 };
 
+const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedOrders = [...filteredOrders].sort((a, b) => {
+    if (!sortConfig.key) return 0;
+
+    let valA, valB;
+
+    // Special case: SI No uses id
+    if (sortConfig.key === 'serial') {
+      valA = a.id;
+      valB = b.id;
+    } else {
+      valA = a[sortConfig.key] || '';
+      valB = b[sortConfig.key] || '';
+    }
+
+    // Convert dates properly
+    if (sortConfig.key === 'start_date' || sortConfig.key === 'end_date') {
+      valA = new Date(valA);
+      valB = new Date(valB);
+    }
+
+    if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  // Sort icons
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) return '⇅';
+    return sortConfig.direction === 'asc' ? '↑' : '↓';
+  };
+
 
   return (
-    <div className="w-full px-4 mt-10">
-      <MDBCard className="card shadow-sm mb-4"style={{ width: "100%" }}>
+<div className="w-full ml-[100px] flex justify-start" style={{ width: "120%" }}>
+  <MDBCard className="card shadow-sm mb-4" style={{ width: "100%" }}>
+
         <MDBCardBody>
           <MDBCardTitle className="text-primary fw-bold fs-4 mb-3">
             📦 Admin PO List
@@ -168,37 +210,38 @@ const AdminPOList = () => {
           <input
             type="text"
             className="form-control mb-3"
-            placeholder="Search by PO Number, Contract No, or Remarks"
+            placeholder="Search by PO Number, Inverter,Contract No, or Remarks"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
 
-          {filteredOrders.length === 0 ? (
+          {sortedOrders.length === 0 ? (
             <p className="text-muted text-center">No POs found.</p>
           ) : (
-            <div className="table-responsive">
+            <div className="overflow-x-auto">
               <MDBTable hover bordered align="middle" sclassName="text-center"
               style={{ tableLayout: "fixed", width: "100%", fontSize: "0.85rem" }}>
                 <MDBTableHead light>
                   <tr>
-                            <th style={{ width: "5%" }}>SI No</th>
-                            <th style={{ width: "10%" }}>PO Number</th>
-                            <th style={{ width: "10%" }}>Contract No</th>
-                            <th style={{ width: "15%" }}>Inverter Number</th>
-                            <th style={{ width: "12%" }}>Client Name</th>
-                            <th style={{ width: "10%" }}>Location</th>
-                            <th style={{ width: "10%" }}>Start Date</th>
-                            <th style={{ width: "10%" }}>End Date</th>
-                            <th style={{ width: "10%" }}>Generator</th>
+                            <th onClick={() => handleSort('serial')} style={{ cursor: 'pointer',width: "5%" }}>SI No {getSortIcon('serial')}</th>
+                            <th onClick={() => handleSort('po_number')} style={{ cursor: 'pointer' ,width: "10%" }}>PO Number {getSortIcon('po_number')}</th>
+                            <th onClick={() => handleSort('contract_no')} style={{ cursor: 'pointer' ,width: "10%" }}>Contract No{getSortIcon('contract_no')}</th>
+                            <th onClick={() => handleSort('inverter_name')} style={{ cursor: 'pointer' , width: "15%" }}>Inverter Number {getSortIcon('inverter_name')}</th>
+                            <th onClick={() => handleSort('client_name')} style={{ cursor: 'pointer',width: "12%" }}>Client Name {getSortIcon('client_name')}</th>
+                            <th onClick={() => handleSort('location_name')} style={{ cursor: 'pointer',width: "10%" }}>Location  {getSortIcon('location_name')}</th>
+                            <th onClick={() => handleSort('start_date')} style={{ cursor: 'pointer', width: "10%" }}>Start Date  {getSortIcon('start_date')}</th>
+                            <th onClick={() => handleSort('end_date')} style={{ cursor: 'pointer' ,width: "10%" }}>End Date  {getSortIcon('end_date')}</th>
+                            <th onClick={() => handleSort('generator_no')} style={{ cursor: 'pointer' , width: "10%" }}>Generator{getSortIcon('generator_no')}</th>
                             <th style={{ width: "10%" }}>Site Contact</th>
                             <th style={{ width: "10%" }}>Remarks</th>
+                            <th style={{ width: "12%" }}>Created By</th> 
                             <th style={{ width: "7%" }}>Edit</th>
                             <th style={{ width: "7%" }}>Delete</th>
                             <th style={{ width: "7%" }}>Offhire</th>
                           </tr>
                 </MDBTableHead>
                 <MDBTableBody>
-                  {filteredOrders.map((order, index) => {
+                  {sortedOrders.map((order, index) => {
                     const serial = (currentPage - 1) * pageSize + index + 1;
                     return (
                       <tr key={order.id} style={{ fontSize: '0.85rem' }}>
@@ -270,6 +313,15 @@ const AdminPOList = () => {
                               </select>
                             </td>
                             <td>
+                                    <input
+                                      name="created_by"
+                                      className="form-control"
+                                      value={editData.created_by || ''}
+                                      disabled
+                                    />
+                            </td>
+
+                            <td>
                               <input name="remarks" className="form-control"
                                 value={editData.remarks} onChange={handleChange} />
                             </td>
@@ -305,10 +357,13 @@ const AdminPOList = () => {
                             <td>{order.generator_no || 'N/A'}</td>
                             <td>{order.site_contact_name || 'N/A'}</td>
                             <td>{order.remarks}</td>
+                            <td>{order.created_by || 'N/A'}</td>
+
                             <td>
                               <MDBBtn size="sm" color="info" className="text-white"
                                 onClick={() => handleEdit(order)}>
-                                <Pencil size={16} />
+                               <i className="fas fa-pen"></i>
+
                               </MDBBtn>
                             </td>
                            <td>
@@ -345,7 +400,7 @@ const AdminPOList = () => {
         </MDBCardBody>
       </MDBCard>
 
-      <div className="d-flex justify-between items-center px-2 mb-5">
+      <div className="d-flex justify-content-between align-items-center mt-3">
         <p className="text-muted">
           Showing {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, count)} of {count}
         </p>

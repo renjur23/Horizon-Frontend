@@ -45,11 +45,11 @@ const AdminDashboard = () => {
       >
         <div className="flex-grow-1">
           <ul className="list-unstyled p-3">
-            <li className="mb-3">
+            {/* <li className="mb-3">
               <Link to="add-po" className="text-white text-decoration-none">
                 <MDBIcon icon="plus" className="me-2" /> Add PO
               </Link>
-            </li>
+            </li> */}
             <li>
               <Link to="view-pos" className="text-white text-decoration-none">
                 <MDBIcon icon="file-alt" className="me-2" /> View POs

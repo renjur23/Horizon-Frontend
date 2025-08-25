@@ -28,15 +28,22 @@ axiosInstance.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // If 401 and not already retried
     if (
       error.response &&
       error.response.status === 401 &&
       !originalRequest._retry
     ) {
       originalRequest._retry = true;
+      const refresh_token = localStorage.getItem('refresh_token');
+
+      if (!refresh_token) {
+        // 🚪 No refresh token → force logout
+        localStorage.removeItem('access_token');
+        window.location.href = '/login';
+        return Promise.reject(error);
+      }
+
       try {
-        const refresh_token = localStorage.getItem('refresh_token');
         const response = await axios.post(`${baseURL}token/refresh/`, {
           refresh: refresh_token,
         });
@@ -44,13 +51,17 @@ axiosInstance.interceptors.response.use(
         const new_access_token = response.data.access;
         localStorage.setItem('access_token', new_access_token);
 
-        // Update header and retry original request
+        // Update headers and retry
         axiosInstance.defaults.headers.Authorization = `Bearer ${new_access_token}`;
         originalRequest.headers.Authorization = `Bearer ${new_access_token}`;
         return axiosInstance(originalRequest);
+
       } catch (refreshError) {
-        console.error('🚫 Refresh failed:', refreshError);
-        // Optionally logout user or redirect to login
+        console.error('🚫 Refresh failed, logging out...');
+        // 🚪 Refresh expired → clear and redirect
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        window.location.href = '/login';
         return Promise.reject(refreshError);
       }
     }
