@@ -25,8 +25,11 @@ import InverterUtilizationList from '../components/employee/InverterUtilizationL
 import ServiceStatusList from '../components/employee/ServiceStatusList';
 import ServiceRecordsForm from '../components/employee/ServiceRecordsForm';
 import UsageReport from '../components/employee/UsageReport';
-import InverterStatusChart from '../components/employee/InverterStatusChart'; // ✅ Import Chart
-import ChecklistForm from '../components/employee/ChecklistForm'; // ✅ Adjust path as needed
+import InverterStatusChart from '../components/employee/InverterStatusChart'; 
+import ChecklistForm from '../components/employee/ChecklistForm'; 
+import SubmittedChecklistList from '../components/employee/SubmittedChecklistList'; 
+
+
 
 const EmployeeDashboard = () => {
   const [showSidebar, setShowSidebar] = useState(true);
@@ -211,8 +214,15 @@ const EmployeeDashboard = () => {
                 }`}
                 onClick={() => setActiveTab('check-list')}
               >
-                <MDBIcon icon="search" className="me-2" /> Checklist
+                <MDBIcon icon="search" className="me-2" /> Pre Hire Checklist
               </li>
+              <li
+                className={`mb-3 ${activeTab === 'submitted-checklists' ? 'fw-bold' : ''}`}
+                onClick={() => setActiveTab('submitted-checklists')}
+              >
+                <MDBIcon icon="clipboard-check" className="me-2" /> Submitted Checklists
+              </li>
+
             </ul>
           </div>
           <div className="p-3">
@@ -258,7 +268,8 @@ const EmployeeDashboard = () => {
               'service-status': 'Service Status',
               'add-service-record': 'Add Service Record',
               'upload-usage': 'Usage  Report',
-              'check-list': ' Checklist',
+              'check-list': ' ',
+              'submitted-checklists': '',
             }[activeTab]
           }
         </h2>
@@ -290,6 +301,7 @@ const EmployeeDashboard = () => {
         )}
         {activeTab === 'upload-usage' && <UsageReport token={token} />}
         {activeTab === 'check-list' && <ChecklistForm token={token} />}
+        {activeTab === 'submitted-checklists' && <SubmittedChecklistList />}
       </div>
     </div>
   );

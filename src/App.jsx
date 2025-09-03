@@ -10,6 +10,10 @@ import AdminPOList from './components/AdminPOList';
 import ForgotPasswordForm from './components/ForgotPasswordForm';
 import ResetPasswordForm from './components/ResetPasswordForm'; // ✅ New Import
 import InverterStatusChart from './components/employee/InverterStatusChart';
+import Checklist from './components/employee/ChecklistForm';
+import SubmittedChecklistList from './components/employee/SubmittedChecklistList';
+
+
 
 function App() {
   return (
@@ -44,14 +48,18 @@ function App() {
           <Route path="view-pos" element={<AdminPOList />} />
         </Route>
         {/* Employee and Guest Dashboards */}
-        <Route
-          path="/employee-dashboard"
-          element={
-            <ProtectedRoute allowedRoles={['employee']}>
-              <EmployeeDashboard />
-            </ProtectedRoute>
-          }
-        />
+       <Route
+                      path="/employee-dashboard"
+                      element={
+                        <ProtectedRoute allowedRoles={['employee']}>
+                          <EmployeeDashboard />
+                        </ProtectedRoute>
+                      }
+                    >
+                      <Route path="checklist" element={<Checklist />} />
+                      <Route path="submitted-checklists" element={<SubmittedChecklistList />} />
+                    </Route>
+
         <Route
           path="/guest-dashboard"
           element={
@@ -60,6 +68,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+        
       </Routes>
     </Router>
   );

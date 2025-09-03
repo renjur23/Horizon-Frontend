@@ -1,3 +1,4 @@
+
 // src/components/reports/UsageReport.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import axiosInstance from "../../api/axiosInstance";
@@ -138,7 +139,7 @@ const UsageReport = ({ token }) => {
       }
       if (!ok) return false;
 
-      if (selectedInverter && u.inverter_id !== selectedInverter) return false;
+     
 
       if (fromDate) {
         const from = new Date(fromDate);
@@ -150,23 +151,16 @@ const UsageReport = ({ token }) => {
         if (usageDate > to) return false;
       }
 
-      // 🔹 Search (inverter, PO, generator)
-      if (search) {
-        const inverter = inverters.find((i) => i.id === u.inverter_id);
-        const order = orders.find((o) => o.id === u.order_id);
-        const generator = generators.find((g) => g.id === u.generator_id);
+      
+// 🔹 Search (strict PO only)
+if (search) {
+  const order = orders.find((o) => o.id === u.order_id);
+  const poNumber = order?.po_number?.toLowerCase() || "";
 
-        const haystack = [
-          inverter?.unit_id,
-          inverter?.given_name,
-          order?.po_number,
-          generator?.serial_number,
-        ]
-          .join(" ")
-          .toLowerCase();
+  if (poNumber !== search.toLowerCase()) return false;
+}
 
-        if (!haystack.includes(search.toLowerCase())) return false;
-      }
+
 
       return true;
     });
@@ -177,99 +171,183 @@ const UsageReport = ({ token }) => {
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentUsages = filteredUsages.slice(indexOfFirstItem, indexOfLastItem);
+// ----------------- PDF export -----------------
 
-  // ----------------- PDF export -----------------
-  const downloadPDF = () => {
-    if (!filteredUsages.length) return;
 
-    const doc = new jsPDF("p", "mm", "a4");
-    const first = filteredUsages[0];
+const downloadPDF = () => {
+  if (!filteredUsages.length) return;
 
-    // Lookup related
+  const doc = new jsPDF("p", "mm", "a4");
+
+  // 🔹 Group usages by PO number
+  const groupedByPO = filteredUsages.reduce((acc, u) => {
+    const po = orders.find(o => o.id === u.order_id)?.po_number || "Unknown PO";
+    if (!acc[po]) acc[po] = [];
+    acc[po].push(u);
+    return acc;
+  }, {});
+
+  // 🔹 For each PO, create a section (new page for each PO)
+  Object.entries(groupedByPO).forEach(([poNumber, usages], idx) => {
+    if (idx > 0) doc.addPage();
+
+    const first = usages[0];
     const inverter = inverters.find(inv => inv.id === first.inverter_id);
-    const order = orders.find(o => o.id === first.order_id);
-   
-    
 
-    // Totals
-    const totalKW = filteredUsages.reduce((s, u) => s + (u.kw_consumed || 0), 0);
-    const totalGenHrSaved = filteredUsages.reduce((s, u) => s + (u.generator_run_hour_save || 0), 0);
-    const totalSiteHours = filteredUsages.reduce((s, u) => s + (u.site_run_hour || 0), 0);
+    // --- Header ---
+    if (logoBase64) doc.addImage(logoBase64, 14, 8, 25, 12);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(
+      `Battery Usage Report - ${inverter?.unit_id || "Unknown Inverter"}`,
+      doc.internal.pageSize.getWidth() / 2,
+      15,
+      { align: "center" }
+    );
+
+    doc.setFontSize(10);
+    doc.text(`PO Number: ${poNumber}`, 14, 28);
+    doc.text(
+      `Location: ${
+        first.location_name ||
+        orders.find(o => o.id === first.order_id)?.location_name ||
+        "-"
+      }`,
+      14,
+      34
+    );
+    doc.text(`Inverter No: ${inverter?.unit_id || "-"}`, 100, 28);
+    doc.text(`Given Name: ${inverter?.given_name || "-"}`, 100, 34);
+    doc.text(`Generator No: ${first.generator_no || "-"}`, 14, 40);
+
+    // --- 🔹 Calculations ---
+    const totalKW = usages.reduce((s, u) => s + (u.kw_consumed || 0), 0);
+    const totalGenHr = usages.reduce((s, u) => s + (u.generator_run_hour || 0), 0);
+    const totalGenHrSaved = usages.reduce((s, u) => s + (u.generator_run_hour_save || 0), 0);
+    const totalSiteHours = usages.reduce((s, u) => s + (u.site_run_hour || 0), 0);
 
     const fuelSaved = totalGenHrSaved * FUEL_CONS_PER_HR;
     const savingsEuro = fuelSaved * FUEL_PRICE;
     const co2Reduction = fuelSaved * CO2_FACTOR;
-    const batteryUsage = totalSiteHours ? ((totalGenHrSaved / totalSiteHours) * 100).toFixed(2) : 0;
+    const batteryUsage = totalSiteHours
+      ? ((totalGenHrSaved / totalSiteHours) * 100).toFixed(2)
+      : 0;
 
-    const addHeader = () => {
-      if (logoBase64) doc.addImage(logoBase64, 14, 8, 25, 12);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.text(
-        `Battery Usage Report - ${inverter?.unit_id || "Unknown Inverter"}`,
-        doc.internal.pageSize.getWidth() / 2,
-        15,
-        { align: "center" }
-      );
-      doc.setFontSize(10);
-      doc.text(`PO Number: ${order?.po_number || "-"}`, 14, 28);
-      doc.text(`Location: ${first.location_name || order?.location_name || "-"}`, 14, 34);
-      doc.text(`Inverter No: ${inverter?.unit_id || "-"}`, 100, 28);
-      doc.text(`Given Name: ${inverter?.given_name || "-"}`, 100, 34);
-      doc.text(`Generator No: ${first.generator_no || "-"}`, 14, 40);
-    };
+    // ✅ numberOfDays based on employee filter
+    let numberOfDays;
+    if (fromDate && toDate) {
+      const start = new Date(fromDate);
+      const end = new Date(toDate);
+      numberOfDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+    } else {
+      numberOfDays = new Set(
+        usages.map(u => new Date(u.date).toDateString())
+      ).size;
+    }
 
-    // Table
-    const tableData = filteredUsages.map((u) => [
-      new Date(u.date).toLocaleDateString("en-GB"),
-      inverters.find((inv) => inv.id === u.inverter_id)?.unit_id || "-",
-      orders.find((o) => o.id === u.order_id)?.po_number || "-",
-      u.kw_consumed,
-      u.generator_run_hour,
-      u.site_run_hour,
-      u.generator_run_hour_save,
-      u.inverter_usage_calculated,
-    ]);
-
+    // --- Section: Reduction in Run-Hours (LEFT TABLE) ---
     autoTable(doc, {
       startY: 50,
-      head: [["Date", "Inverter", "PO", "kW", "Gen Hr", "Site Hr", "Saved Hr", "Usage %"]],
+      margin: { left: 14, right: 110 },
+      tableWidth: 80,
+      head: [["Metric", "Value"]],
+      body: [
+        ["Number of Days", numberOfDays],
+        ["Fuel consumption per hour", `${FUEL_CONS_PER_HR} L/hr`],
+        ["Cost of Fuel per Litre", `€${FUEL_PRICE}`],
+        ["Normal Run-Hours (Site)", `${totalSiteHours.toFixed(1)} h`],
+        ["Actual Run-Hours (Gen)", `${totalGenHr.toFixed(1)} h`],
+        ["Reduction in Run-Hours", `${totalGenHrSaved.toFixed(1)} h`],
+      ],
+      styles: { fontSize: 8 },
+      theme: "grid",
+    });
+
+    // --- Section: Reduction in Fuel Consumed (RIGHT TABLE) ---
+    autoTable(doc, {
+      startY: 50,
+      margin: { left: 110, right: 14 },
+      tableWidth: 85,
+      head: [["Metric", "Run-time (hrs)", "Cost (€)"]],
+      body: [
+        [
+          "Conventional Generator",
+          `${totalSiteHours.toFixed(1)} h`,
+          `€${(totalSiteHours * FUEL_CONS_PER_HR * FUEL_PRICE).toFixed(2)}`
+        ],
+        [
+          "Hybrid Generator",
+          `${totalGenHr.toFixed(1)} h`,
+          `€${(totalGenHr * FUEL_CONS_PER_HR * FUEL_PRICE).toFixed(2)}`
+        ],
+        ["Fuel Saved", `${fuelSaved.toFixed(1)} L`, `€${savingsEuro.toFixed(2)}`],
+      ],
+      styles: { fontSize: 8 },
+      theme: "grid",
+    });
+
+    // --- Daily Usage Table ---
+    const tableData = usages.map(u => {
+      const rowFuelSaved = (u.generator_run_hour_save || 0) * FUEL_CONS_PER_HR;
+      const rowSavingsEuro = rowFuelSaved * FUEL_PRICE;
+      const rowCo2Reduction = rowFuelSaved * CO2_FACTOR;
+
+      return [
+        new Date(u.date).toLocaleDateString("en-GB"),
+        u.kw_consumed,
+        u.generator_run_hour,
+        u.site_run_hour,
+        u.generator_run_hour_save,
+        u.inverter_usage_calculated,
+        rowFuelSaved.toFixed(1),
+        `€${rowSavingsEuro.toFixed(2)}`,
+        rowCo2Reduction.toFixed(1),
+      ];
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 15,
+      head: [
+        [
+          "Date",
+          "kW",
+          "Gen Hr",
+          "Site Hr",
+          "Saved Hr",
+          "Usage %",
+          "Fuel Saved (L)",
+          "Savings (€)",
+          "CO₂ Reduced (kg)"
+        ]
+      ],
       body: tableData,
       styles: { fontSize: 9 },
       theme: "grid",
       margin: { left: 14, right: 14 },
-      didDrawPage: (data) => {
-        if (data.pageNumber === 1) addHeader();
-      },
     });
 
-    // 📊 Styled Summary Table
-    // 📊 Styled Summary Table with icons (compact size)
+    // --- Section: Overall Performance ---
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(0, 128, 0);
+    doc.text("Overall Performance", 14, doc.lastAutoTable.finalY + 15);
+
     autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + 12,
+      startY: doc.lastAutoTable.finalY + 20,
       head: [["Metric", "Value"]],
       body: [
-          [" Power Consumed", `${totalKW.toFixed(1)} kW`],
-          ["Gen Hours Saved", `${totalGenHrSaved.toFixed(1)} h`],
-          ["Fuel Saved", `${fuelSaved.toFixed(1)} L`],
-          ["Fuel Savings", `€${savingsEuro.toFixed(2)}`],
-          ["CO₂ Reduction", `${co2Reduction.toFixed(1)} kg`],
-          [" Battery Usage", `${batteryUsage}%`],
+        ["Power Consumed", `${totalKW.toFixed(1)} kW`],
+        ["Generator Running Hours Saved", `${totalGenHrSaved.toFixed(1)} h`],
+        ["Fuel Saved", `${fuelSaved.toFixed(1)} L`],
+        ["Savings on Fuel", `€${savingsEuro.toFixed(2)}`],
+        ["Reduced CO₂ Emissions", `${co2Reduction.toFixed(1)} kg`],
+        ["Battery Usage %", `${batteryUsage}%`],
       ],
-      styles: { fontSize: 9, cellPadding: 2 },   // smaller font + tighter padding
-      headStyles: { fillColor: [0, 128, 0], textColor: [255, 255, 255], halign: "center" },
-      bodyStyles: { halign: "center" },
-      alternateRowStyles: { fillColor: [245, 245, 245] },
+      styles: { fontSize: 9 },
       theme: "grid",
-      margin: { left: 40, right: 40 },           // narrower margins
-      columnStyles: { 
-        0: { halign: "left", cellWidth: 80 },    // metric column smaller
-        1: { halign: "center", cellWidth: 60 },  // value column smaller
-      },
     });
 
-
-    // ✅ Footer with correct page numbers
+    // --- Footer with page numbers ---
     const pageCount = doc.internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
@@ -279,11 +357,21 @@ const UsageReport = ({ token }) => {
       doc.text(`Page ${i} of ${pageCount}`, 200 - 14, 290, { align: "right" });
     }
 
-    doc.save(`${inverter?.unit_id || "Report"}.pdf`);
-  };
+    // 🔹 Save using inverter unit_id and order's location
+    const firstUsage = filteredUsages[0];
+    const firstInverter = inverters.find(inv => inv.id === firstUsage.inverter_id);
+    const order = orders.find(o => o.id === firstUsage.order_id);
+    const location = locations.find(loc => loc.id === order?.location_id);
+
+    doc.save(
+      `${inverter?.unit_id || "UnknownInverter"}_${location?.location_name || "UnknownLocation"}.pdf`
+    );
+  });
+};
+
 
   // Excel upload handler
-  const handleExcelUpload = async (e) => {
+const handleExcelUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -291,7 +379,7 @@ const UsageReport = ({ token }) => {
     formData.append("file", file);
 
     try {
-      await axiosInstance.post("/usages/upload_excel/", formData, {
+      await axiosInstance.post("/usages-upload/", formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
@@ -331,7 +419,7 @@ const UsageReport = ({ token }) => {
           <input
             type="text"
             className="form-control"
-            placeholder="Search inverter, po number"
+            placeholder="Search po number"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -359,25 +447,7 @@ const UsageReport = ({ token }) => {
           </select>
         </div>
 
-        {/* Inverter dropdown */}
-        <div>
-          <label className="form-label">Inverter</label>
-          <select
-            className="form-select"
-            value={selectedInverter}
-            onChange={(e) => {
-              setSelectedInverter(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="">All Inverters</option>
-            {inverters.map((inv) => (
-              <option key={inv.id} value={inv.id}>
-                {inv.unit_id}
-              </option>
-            ))}
-          </select>
-        </div>
+        
 
         {/* Date range */}
         <div>
@@ -417,35 +487,46 @@ const UsageReport = ({ token }) => {
       {/* Table */}
       <MDBTable responsive striped small bordered>
         <MDBTableHead>
-          <tr>
-            <th>No</th>
-            <th>Date</th>
-            <th>Inverter</th>
-            <th>PO</th>
-            
-            <th>kW</th>
-            <th>Gen Hr</th>
-            <th>Site Hr</th>
-            <th>Usage %</th>
-            <th>Saved Hr</th>
+         <tr>
+                    <th>No</th>
+                    <th>Date</th>
+                    <th>Inverter</th>
+                    <th>PO</th>
+                    <th>kW</th>
+                    <th>Gen Hr</th>
+                    <th>Site Hr</th>
+                    <th>Usage %</th>
+                    <th>Saved Hr</th>
+                    <th>Fuel Saved (L)</th>
+                    <th>Savings (€)</th>
+                    <th>CO2 Reduced (kg)</th>
           </tr>
         </MDBTableHead>
-        <MDBTableBody>
-          {currentUsages.map((u, i) => (
-            <tr key={u.id}>
-              <td>{indexOfFirstItem + i + 1}</td>
-              <td>{new Date(u.date).toLocaleDateString("en-GB")}</td>
-              <td>{inverters.find((inv) => inv.id === u.inverter_id)?.unit_id || "-"}</td>
-              <td>{orders.find((o) => o.id === u.order_id)?.po_number || "-"}</td>
-              
-              <td>{u.kw_consumed}</td>
-              <td>{u.generator_run_hour}</td>
-              <td>{u.site_run_hour}</td>
-              <td>{u.inverter_usage_calculated}</td>
-              <td>{u.generator_run_hour_save}</td>
-            </tr>
-          ))}
-        </MDBTableBody>
+       <MDBTableBody>
+            {currentUsages.map((u, i) => {
+              const fuelSaved = (u.generator_run_hour_save || 0) * FUEL_CONS_PER_HR;
+              const savingsEuro = fuelSaved * FUEL_PRICE;
+              const co2Reduction = fuelSaved * CO2_FACTOR;
+
+              return (
+                <tr key={u.id}>
+                  <td>{indexOfFirstItem + i + 1}</td>
+                  <td>{new Date(u.date).toLocaleDateString("en-GB")}</td>
+                  <td>{inverters.find((inv) => inv.id === u.inverter_id)?.unit_id || "-"}</td>
+                  <td>{orders.find((o) => o.id === u.order_id)?.po_number || "-"}</td>
+                  <td>{u.kw_consumed}</td>
+                  <td>{u.generator_run_hour}</td>
+                  <td>{u.site_run_hour}</td>
+                  <td>{u.inverter_usage_calculated}</td>
+                  <td>{u.generator_run_hour_save}</td>
+                  <td>{fuelSaved.toFixed(1)}</td>
+                  <td>€{savingsEuro.toFixed(2)}</td>
+                  <td>{co2Reduction.toFixed(1)}</td>
+                </tr>
+              );
+            })}
+</MDBTableBody>
+
       </MDBTable>
 
       {/* Pagination */}

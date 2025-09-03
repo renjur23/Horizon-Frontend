@@ -160,7 +160,7 @@ const goToPrevPage = () => {
           {/* Search Bar */}
           <input
             type="text"
-            placeholder="Search by Unit ID, Model, Name, Serial No or Status"
+            placeholder="Search by Unit ID, Model, Given Name, Serial No or Status"
             className="form-control mb-3"
             value={searchQuery}
             onChange={(e) => {setSearchQuery(e.target.value);

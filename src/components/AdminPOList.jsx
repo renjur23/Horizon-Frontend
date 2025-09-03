@@ -141,7 +141,10 @@ const goToPrevPage = () => {
       order.po_number?.toLowerCase().includes(query) ||
       order.contract_no?.toLowerCase().includes(query) ||
       order.remarks?.toLowerCase().includes(query)||
-      (order.inverter_name || '').toLowerCase().includes(searchQuery.toLowerCase())
+      (order.inverter_name || '').toLowerCase().includes(searchQuery.toLowerCase())||
+      (order.generator_no || '').toLowerCase().includes(query) ||   
+      (order.location_name || '').toLowerCase().includes(query) ||
+      (order.client_name || '').toLowerCase().includes(query)  
     );
   });
 
@@ -210,7 +213,7 @@ const handleSort = (key) => {
           <input
             type="text"
             className="form-control mb-3"
-            placeholder="Search by PO Number, Inverter,Contract No, or Remarks"
+            placeholder="Search by PO Number, Inverter, Contract No, Location, Generator ,Client Name "
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />

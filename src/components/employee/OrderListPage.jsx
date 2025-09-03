@@ -26,6 +26,10 @@ const OrderListPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  const [sortField, setSortField] = useState(null);
+  const [sortOrder, setSortOrder] = useState('asc'); 
+
+
 
   useEffect(() => {
     fetchFilledOrders();
@@ -80,13 +84,47 @@ const OrderListPage = () => {
       );
 
       setOrders(filledOrders);
-      setTotalPages(Math.ceil(res.data.count / 20)); // use DRF's count
+      setTotalPages(Math.ceil(res.data.count / 20)); 
       setCurrentPage(page);
     } catch (error) {
       console.error(error);
       setErrorMsg('Failed to fetch employee-filled orders.');
     }
   };
+
+  const handleSort = (field) => {
+  if (sortField === field) {
+    // toggle asc/desc
+    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+  } else {
+    setSortField(field);
+    setSortOrder('asc');
+  }
+};
+
+
+const filteredOrders = orders.filter(
+  (order) =>
+    order.po_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    order.contract_no.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (order.inverter_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (order.generator_no || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (order.location_name || '').toLowerCase().includes(searchQuery.toLowerCase())
+);
+
+const sortedOrders = [...filteredOrders].sort((a, b) => {
+  if (!sortField) return 0;
+
+  const aVal = a[sortField] || '';
+  const bVal = b[sortField] || '';
+
+  if (sortOrder === 'asc') {
+    return aVal.toString().localeCompare(bVal.toString(), undefined, { numeric: true });
+  } else {
+    return bVal.toString().localeCompare(aVal.toString(), undefined, { numeric: true });
+  }
+});
+
 
   const handleEdit = (order) => {
     setEditingId(order.id);
@@ -98,8 +136,8 @@ const OrderListPage = () => {
       start_date: order.start_date?.split('T')[0] || '',
       end_date: order.end_date?.split('T')[0] || '',
       remarks: order.remarks || '',
-      fuel_price: editData.fuel_price === "" ? null : editData.fuel_price,
-      co2_emission_per_litre: editData.co2_emission_per_litre === "" ? null : editData.co2_emission_per_litre,
+      fuel_price: order.fuel_price ?? '',   
+      co2_emission_per_litre: order.co2_emission_per_litre ?? '',
 
     });
   };
@@ -186,12 +224,14 @@ const handleSave = async () => {
     }
   };
 
-  const filteredOrders = orders.filter(
-    (order) =>
-      order.po_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.contract_no.toLowerCase().includes(searchQuery.toLowerCase())||
-      (order.inverter_name || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // const filteredOrders = orders.filter(
+  //   (order) =>
+  //     order.po_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  //     order.contract_no.toLowerCase().includes(searchQuery.toLowerCase())||
+  //     (order.inverter_name || '').toLowerCase().includes(searchQuery.toLowerCase())||
+  //      (order.generator_no || '').toLowerCase().includes(searchQuery.toLowerCase()) ||   
+  //     (order.location_name || '').toLowerCase().includes(searchQuery.toLowerCase()) 
+  // );
 
 
  
@@ -210,7 +250,7 @@ const handleSave = async () => {
           <input
             type="text"
             className="form-control mb-3"
-            placeholder="Search by PO number, Inverter name or Contract number"
+            placeholder="Search by PO number, Inverter name , Contract number ,Generator no "
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -225,25 +265,43 @@ const handleSave = async () => {
           ) : (
             <div className="table-responsive">
               <MDBTable hover bordered align="middle">
-                <MDBTableHead light>
-                  <tr>
-                    <th>Si. No</th>
-                    <th>PO Number</th>
-                    <th>Contract No</th>
-                    <th>Location</th>
-                    <th>Inverter</th>
-                    <th>Generator No</th>
-                    <th>Site Contact</th>
-                    <th>Start Date</th>
-                    <th>End Date</th>
-                    <th>Remarks</th>
-                    <th>Fuel Price</th>
-                    <th>CO₂/litre</th>
-                    <th>Actions</th>
-                  </tr>
-                </MDBTableHead>
+                
+       <MDBTableHead light>
+                      <tr>
+                        <th>Si. No</th>
+                        <th onClick={() => handleSort("po_number")} style={{ cursor: "pointer" }}>
+                          PO Number {sortField === "po_number" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                        </th>
+                        <th onClick={() => handleSort("contract_no")} style={{ cursor: "pointer" }}>
+                          Contract No {sortField === "contract_no" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                        </th>
+                        <th onClick={() => handleSort("location_name")} style={{ cursor: "pointer" }}>
+                          Location {sortField === "location_name" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                        </th>
+                        <th onClick={() => handleSort("inverter_name")} style={{ cursor: "pointer" }}>
+                          Inverter {sortField === "inverter_name" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                        </th>
+                        <th onClick={() => handleSort("generator_no")} style={{ cursor: "pointer" }}>
+                          Generator No {sortField === "generator_no" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                        </th>
+                        <th onClick={() => handleSort("site_contact_name")} style={{ cursor: "pointer" }}>
+                          Site Contact {sortField === "site_contact_name" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                        </th>
+                        <th onClick={() => handleSort("start_date")} style={{ cursor: "pointer" }}>
+                          Start Date {sortField === "start_date" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                        </th>
+                        <th onClick={() => handleSort("end_date")} style={{ cursor: "pointer" }}>
+                          End Date {sortField === "end_date" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                        </th>
+                        <th>Remarks</th>
+                        <th>Fuel Price</th>
+                        <th>CO₂/litre</th>
+                        <th>Actions</th>
+                      </tr>
+             </MDBTableHead>
+
                 <MDBTableBody>
-                  {filteredOrders.map((order, index) => (
+                  {sortedOrders.map((order, index) => (
                     <tr key={order.id}>
                       <td>{(currentPage - 1) * 20 + index + 1}</td>
                       <td>{order.po_number}</td>

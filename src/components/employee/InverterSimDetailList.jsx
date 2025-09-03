@@ -145,7 +145,7 @@ const InverterSimDetailList = () => {
       <div className="mb-3">
           <input
             type="text"
-            placeholder="Search by Phone, SIM, User No, Inverter"
+            placeholder="Search by Phone, SIM Serial No, Inverter"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="form-control"

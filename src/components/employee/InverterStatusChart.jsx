@@ -44,43 +44,76 @@ const renderCustomizedLabel = ({
   );
 };
 
+// Normalize status only for pie chart display
+const normalizeStatus = (status) => {
+  if (!status) return status;
+  const s = status.trim().toLowerCase();
+  if (s.includes('operational') || s.includes('ready to hire')) return 'Operational(Ready to Hire)';
+  return status;
+};
+
+// Helper to group inverters by key
+const groupInvertersBy = (list, keyFn) => {
+  return list.reduce((acc, item) => {
+    const key = keyFn(item);
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(item);
+    return acc;
+  }, {});
+};
+
 const InverterStatusChart = ({ mode = 'employee' }) => {
   const [data, setData] = useState([]);
   const [selectedStatus, setSelectedStatus] = useState(null);
   const [inverterList, setInverterList] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Inside your component
   const navigate = useNavigate();
 
   const handleItemClick = (givenStartName, inverter_id) => {
-    // Navigate to the add-po page with the given_start_name as a query parameter
     navigate(
-      `/admin-dashboard/add-po?inverter=${encodeURIComponent(
-        givenStartName
-      )}&inverter_id=${encodeURIComponent(inverter_id)}`
+      `/admin-dashboard/add-po?inverter=${encodeURIComponent(givenStartName)}&inverter_id=${encodeURIComponent(inverter_id)}`
     );
+  };
+
+  const fetchInvertersByStatus = async (status) => {
+    try {
+      let apiStatus = status;
+      // Admin only sees Operational(Ready to Hire)
+      if (mode === 'admin') apiStatus = 'Operational(Ready to Hire)';
+
+      const response = await axiosInstance.get(
+        `/inverters/?inverter_status__inverter_status_name=${encodeURIComponent(apiStatus)}`
+      );
+
+      setSelectedStatus(apiStatus);
+      setInverterList(response.data.results);
+    } catch (error) {
+      console.error('Failed to fetch inverters by status:', error);
+      setInverterList([]);
+    }
   };
 
   useEffect(() => {
     const fetchSummaryAndDefault = async () => {
       try {
-        const response = await axiosInstance.get(
-          '/api/inverter-status-summary/'
-        );
+        const response = await axiosInstance.get('/api/inverter-status-summary/');
         const result = response.data;
 
-        const transformed = Object.keys(result).map((status) => ({
-          name: status,
-          value: result[status],
-        }));
+        const transformed = Object.keys(result).reduce((acc, status) => {
+          const normalized = normalizeStatus(status);
+          const existing = acc.find((item) => item.name === normalized);
+          if (existing) {
+            existing.value += result[status];
+          } else {
+            acc.push({ name: normalized, value: result[status] });
+          }
+          return acc;
+        }, []);
 
         setData(transformed);
 
         if (mode === 'admin') {
-          // Only fetch Ready to Hire for admin
           fetchInvertersByStatus('Operational(Ready to Hire)');
-          setSelectedStatus('Operational(Ready to Hire)');
         }
       } catch (error) {
         console.error('Failed to fetch inverter status summary:', error);
@@ -92,34 +125,16 @@ const InverterStatusChart = ({ mode = 'employee' }) => {
     fetchSummaryAndDefault();
   }, [mode]);
 
-  const fetchInvertersByStatus = async (status) => {
-    try {
-      const response = await axiosInstance.get(
-        `/inverters/?inverter_status__inverter_status_name=${encodeURIComponent(
-          status
-        )}`
-      );
-      // console.log(response);
-      setInverterList(response.data.results);
-      setSelectedStatus(status);
-    } catch (error) {
-      console.error('Failed to fetch inverters by status:', error);
-      setInverterList([]);
-    }
-  };
-
   const totalInverters = data.reduce((sum, item) => sum + item.value, 0);
 
   if (loading) return <p>Loading inverter summary...</p>;
-  if (mode !== 'admin' && data.length === 0)
-    return <p>No inverter data available.</p>;
+  if (mode !== 'admin' && data.length === 0) return <p>No inverter data available.</p>;
 
   return (
     <div style={{ width: '100%', textAlign: 'center', paddingBottom: '2rem' }}>
-      {/* Only show pie chart and summary in employee mode */}
+      {/* Pie Chart */}
       {mode !== 'admin' && (
         <div className="d-flex justify-content-center align-items-start gap-4 flex-wrap">
-          {/* Pie Chart */}
           <div style={{ width: '400px', height: 400 }}>
             <ResponsiveContainer>
               <PieChart>
@@ -134,10 +149,7 @@ const InverterStatusChart = ({ mode = 'employee' }) => {
                   onClick={(e) => fetchInvertersByStatus(e.name)}
                 >
                   {data.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[entry.name] || '#8884d8'}
-                    />
+                    <Cell key={`cell-${index}`} fill={COLORS[entry.name] || '#8884d8'} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -154,17 +166,13 @@ const InverterStatusChart = ({ mode = 'employee' }) => {
                 width: '300px',
                 backgroundColor: '#f8f9fa',
                 border: '1px solid #dee2e6',
-                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
               }}
             >
               <thead style={{ backgroundColor: '#343a40', color: '#fff' }}>
                 <tr>
-                  <th style={{ padding: '10px', border: '1px solid #dee2e6' }}>
-                    Status
-                  </th>
-                  <th style={{ padding: '10px', border: '1px solid #dee2e6' }}>
-                    Count
-                  </th>
+                  <th style={{ padding: '10px', border: '1px solid #dee2e6' }}>Status</th>
+                  <th style={{ padding: '10px', border: '1px solid #dee2e6' }}>Count</th>
                 </tr>
               </thead>
               <tbody>
@@ -174,13 +182,7 @@ const InverterStatusChart = ({ mode = 'employee' }) => {
                     onClick={() => fetchInvertersByStatus(entry.name)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <td
-                      style={{
-                        padding: '10px',
-                        border: '1px solid #dee2e6',
-                        fontWeight: 600,
-                      }}
-                    >
+                    <td style={{ padding: '10px', border: '1px solid #dee2e6', fontWeight: 600 }}>
                       <span
                         style={{
                           display: 'inline-block',
@@ -193,92 +195,47 @@ const InverterStatusChart = ({ mode = 'employee' }) => {
                       ></span>
                       {entry.name}
                     </td>
-                    <td
-                      style={{ padding: '10px', border: '1px solid #dee2e6' }}
-                    >
-                      {entry.value}
-                    </td>
+                    <td style={{ padding: '10px', border: '1px solid #dee2e6' }}>{entry.value}</td>
                   </tr>
                 ))}
                 <tr style={{ fontWeight: 'bold', backgroundColor: '#e9ecef' }}>
-                  <td style={{ padding: '10px', border: '1px solid #dee2e6' }}>
-                    Total
-                  </td>
-                  <td style={{ padding: '10px', border: '1px solid #dee2e6' }}>
-                    {totalInverters}
-                  </td>
+                  <td style={{ padding: '10px', border: '1px solid #dee2e6' }}>Total</td>
+                  <td style={{ padding: '10px', border: '1px solid #dee2e6' }}>{totalInverters}</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </div>
       )}
-      {/* admin Table */}
+
+      {/* Admin Table */}
       {mode === 'admin' && selectedStatus && (
         <div className="mt-5">
-          <h5 className="text-dark fw-bold mb-3">
-            {mode === 'admin'
-              ? 'Ready to Hire Units'
-              : `Battery with status: ${selectedStatus}`}
-          </h5>
+          <h5 className="text-dark fw-bold mb-3">Ready to Hire Units</h5>
           {inverterList.length === 0 ? (
             <p>No Batteries found.</p>
           ) : (
             <table className="table table-bordered">
               <thead>
                 <tr>
-                  {Object.keys(
-                    inverterList
-                      .filter(
-                        (inv) =>
-                          inv.inverter_status.inverter_status_name ===
-                          'Operational(Ready to Hire)'
-                      )
-                      .reduce((acc, inverter) => {
-                        const model = inverter.model || 'Unknown';
-                        if (!acc[model]) acc[model] = [];
-                        acc[model].push(inverter);
-                        return acc;
-                      }, {})
-                  ).map((model) => (
+                  {Object.keys(groupInvertersBy(inverterList, (inv) => inv.model || 'Unknown')).map((model) => (
                     <th key={model}>{model}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {(() => {
-                  const groupedData = inverterList
-                    .filter(
-                      (inv) =>
-                        inv.inverter_status.inverter_status_name ===
-                        'Operational(Ready to Hire)'
-                    )
-                    .reduce((acc, inverter) => {
-                      const model = inverter.model || 'Unknown';
-                      if (!acc[model]) acc[model] = [];
-                      acc[model].push(inverter);
-                      return acc;
-                    }, {});
-
-                  const maxRows = Math.max(
-                    ...Object.values(groupedData).map((items) => items.length),
-                    0
-                  );
-
+                  const groupedData = groupInvertersBy(inverterList, (inv) => inv.model || 'Unknown');
+                  const maxRows = Math.max(...Object.values(groupedData).map((items) => items.length), 0);
                   return Array.from({ length: maxRows }, (_, rowIndex) => (
                     <tr key={rowIndex}>
                       {Object.entries(groupedData).map(([model, items]) => (
                         <td key={model}>
                           {items[rowIndex] ? (
                             <span
-                              className="text-primary "
+                              className="text-primary"
                               style={{ cursor: 'pointer' }}
-                              onClick={() =>
-                                handleItemClick(
-                                  items[rowIndex].given_start_name,
-                                  items[rowIndex].id
-                                )
-                              }
+                              onClick={() => handleItemClick(items[rowIndex].given_start_name, items[rowIndex].id)}
                             >
                               {items[rowIndex].given_start_name}
                             </span>
@@ -295,70 +252,26 @@ const InverterStatusChart = ({ mode = 'employee' }) => {
           )}
         </div>
       )}
-      {/* Employee Table - shows selected status */}
 
+      {/* Employee Table */}
       {mode !== 'admin' && selectedStatus && (
         <div className="mt-5">
-          <h5 className="text-dark fw-bold mb-3">
-            Batteries with status: {selectedStatus}
-          </h5>
-
+          <h5 className="text-dark fw-bold mb-3">Batteries with status: {selectedStatus}</h5>
           {inverterList.length === 0 ? (
             <p>No Batteries found.</p>
           ) : (
             <table className="table table-bordered">
               <thead>
                 <tr>
-                  {Object.keys(
-                    inverterList
-
-                      .filter(
-                        (inv) =>
-                          inv.inverter_status.inverter_status_name ===
-                          selectedStatus
-                      )
-
-                      .reduce((acc, inverter) => {
-                        const model = inverter.model || 'Unknown';
-
-                        if (!acc[model]) acc[model] = [];
-
-                        acc[model].push(inverter);
-
-                        return acc;
-                      }, {})
-                  ).map((model) => (
+                  {Object.keys(groupInvertersBy(inverterList, (inv) => inv.model || 'Unknown')).map((model) => (
                     <th key={model}>{model}</th>
                   ))}
                 </tr>
               </thead>
-
               <tbody>
                 {(() => {
-                  const groupedData = inverterList
-
-                    .filter(
-                      (inv) =>
-                        inv.inverter_status.inverter_status_name ===
-                        selectedStatus
-                    )
-
-                    .reduce((acc, inverter) => {
-                      const model = inverter.model || 'Unknown';
-
-                      if (!acc[model]) acc[model] = [];
-
-                      acc[model].push(inverter);
-
-                      return acc;
-                    }, {});
-
-                  const maxRows = Math.max(
-                    ...Object.values(groupedData).map((items) => items.length),
-
-                    0
-                  );
-
+                  const groupedData = groupInvertersBy(inverterList, (inv) => inv.model || 'Unknown');
+                  const maxRows = Math.max(...Object.values(groupedData).map((items) => items.length), 0);
                   return Array.from({ length: maxRows }, (_, rowIndex) => (
                     <tr key={rowIndex}>
                       {Object.entries(groupedData).map(([model, items]) => (

@@ -1,605 +1,464 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import axiosInstance from '../../api/axiosInstance';
-import { MDBBtn } from 'mdb-react-ui-kit';
-
-const sections = [
-  {
-    title: 'Physical Checks',
-    items: [
-      'Check The History & Service records',
-      'Inspect external enclosure for damage (dents, cracks, or corrosion).',
-      'Ensure all input/output sockets are intact',
-      'Confirm no loose or exposed wiring.',
-      'Verify lifting points and transport fittings are secure',
-    ],
-  },
-  {
-    title: 'Battery System',
-    items: [
-      'Check battery charge level',
-      'Inspect battery terminals for corrosion or loose connections',
-      'Confirm battery management system (BMS) is operational',
-      'Ensure no signs of leakage',
-    ],
-  },
-  {
-    title: 'Electrical and Control Systems',
-    items: [
-      'Test inverter functionality for AC power conversion',
-      'Check GSM remote monitoring system connectivity.',
-      'Test automatic generator start signal and bypass functionality.',
-      'Test short circuit, overload, overtemperature, and low battery protections.',
-      'Finder Timer is disconnected - FL 8',
-    ],
-  },
-  {
-    title: 'Load Test',
-    items: [
-      'Test Time Start',
-      'Test Time End',
-      'Load',
-      'Battery Voltage at Start',
-      'Battery Voltage at End',
-      'Lowest Battery Voltage Dip',
-    ],
-  },
-];
-
-const statusOptions = ['OK', 'NOT OK', 'NA'];
-
-const calculateTestTime = (start, end) => {
-  try {
-    const [sh, sm] = start.split(':').map(Number);
-    const [eh, em] = end.split(':').map(Number);
-    let startDate = new Date(0, 0, 0, sh, sm);
-    let endDate = new Date(0, 0, 0, eh, em);
-    if (endDate < startDate) endDate.setDate(endDate.getDate() + 1);
-    const diffMin = Math.floor((endDate - startDate) / 60000);
-    const hours = String(Math.floor(diffMin / 60)).padStart(2, '0');
-    const minutes = String(diffMin % 60).padStart(2, '0');
-    return `${hours}:${minutes}:00`;
-  } catch {
-    return '';
-  }
-};
-
-function naturalSort(a, b) {
-  // Convert to string just in case
-  const unitA = a.unit_no.toString();
-  const unitB = b.unit_no.toString();
-
-  // Use localeCompare with numeric option for natural ordering
-  return unitA.localeCompare(unitB, undefined, {
-    numeric: true,
-    sensitivity: 'base',
-  });
-}
+import React, { useState, useEffect,useRef  } from "react";
+import axiosInstance from "../../api/axiosInstance";
+import { useNavigate } from "react-router-dom";
 
 const ChecklistForm = () => {
-  const [formData, setFormData] = useState({});
-  const [batteryVoltages, setBatteryVoltages] = useState({});
-  const [testTime, setTestTime] = useState('');
-  const [submittedChecklists, setSubmittedChecklists] = useState([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [expandedChecklistId, setExpandedChecklistId] = useState(null);
+  const initialFormData = {};
+  const [formData, setFormData] = useState(initialFormData);
+  const [inverters, setInverters] = useState([]);
+  const [selectedInverter, setSelectedInverter] = useState(null);
+  const [images, setImages] = useState([]);
+  const fileInputRef = useRef(null);
 
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const start = formData['Load Test-0']?.status || '';
-    const end = formData['Load Test-1']?.status || '';
-    setTestTime(calculateTestTime(start, end));
-  }, [formData]);
-
-  useEffect(() => {
-    fetchChecklists(currentPage);
-  }, [currentPage]);
-
-  // const fetchChecklists = async (page = 1) => {
-  //   try {
-  //     const response = await axiosInstance.get(`/checklists/?page=${page}`);
-  //     setSubmittedChecklists(response.data.results);
-  //     setTotalPages(Math.ceil(response.data.count / 10));
-  //   } catch (error) {
-  //     console.error('Failed to fetch checklists:', error);
-  //   }
-  // };
-
-  const fetchChecklists = async (page = 1) => {
-    try {
-      const response = await axiosInstance.get(`/checklists/?page=${page}`);
-      const sortedResults = [...response.data.results].sort(naturalSort);
-      setSubmittedChecklists(sortedResults);
-      setTotalPages(Math.ceil(response.data.count / 10));
-    } catch (error) {
-      console.error('Failed to fetch checklists:', error);
-    }
+  const sections = {
+    "Physical Checks": [
+      "Check The History & Service records",
+      "Inspect external enclosure for damage (dents, cracks, or corrosion).",
+      "Ensure all input/output sockets are intact",
+      "Confirm no loose or exposed wiring.",
+      "Verify lifting points and transport fittings are secure",
+    ],
+    "Battery System": [
+      "Check battery charge level",
+      "Inspect battery terminals for corrosion or loose connections",
+      "Confirm battery management system (BMS) is operational",
+      "Ensure no signs of leakage",
+    ],
+    "Electrical and Control Systems": [
+      "Test inverter functionality for AC power conversion",
+      "Check GSM remote monitoring system connectivity.",
+      "Test automatic generator start signal and bypass functionality.",
+      "Test short circuit, overload, overtemperature, and low battery protections.",
+      "Finder Timer Is disconnected - FL 8",
+    ],
   };
 
-  const handleChange = (section, index, field, value) => {
-    const key = `${section}-${index}`;
+  const batteryCount = 25;
+
+  useEffect(() => {
+    axiosInstance
+      .get("/inverters/?status=Testing")
+      .then((res) => setInverters(res.data.results || res.data))
+      .catch((err) => console.error("Error fetching inverters:", err));
+  }, []);
+
+  const handleChange = (name, value) => {
+    setFormData((prev) => {
+      const updated = { ...prev, [name]: value };
+
+      if (updated.test_time_start && updated.test_time_end) {
+        const start = new Date(updated.test_time_start);
+        const end = new Date(updated.test_time_end);
+
+        if (!isNaN(start) && !isNaN(end) && end > start) {
+          const diffMinutes = Math.floor((end - start) / 60000);
+          updated.test_time = `${diffMinutes} min`;
+        } else {
+          updated.test_time = "";
+        }
+      }
+
+      return updated;
+    });
+  };
+
+  const handleInverterSelect = (e) => {
+    const inverterId = e.target.value;
+    const inverter = inverters.find((inv) => inv.id.toString() === inverterId);
+    setSelectedInverter(inverter);
     setFormData((prev) => ({
       ...prev,
-      [key]: {
-        ...prev[key],
-        [field]: value,
-      },
+      inverter: inverter?.id || "",
+      unit_model: inverter?.model_name || inverter?.model || "",
     }));
   };
 
-  const handleBatteryChange = (index, value) => {
-    setBatteryVoltages((prev) => ({ ...prev, [index]: value }));
-  };
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const data = new FormData();
 
-    try {
-      const items = [];
+  // Required fields
+  data.append("unit_status", formData.unit_status || ""); 
+  data.append("tested_by", formData.tested_by || ""); 
+  data.append("inverter", formData.inverter || "");
+  data.append("date", formData.date || "");
+  data.append("load", formData.load || "");
+  data.append("test_time_start", formData.test_time_start || "");
+  data.append("test_time_end", formData.test_time_end || "");
+  data.append("test_time", formData.test_time || "");
+  data.append("battery_voltage_start", formData.battery_voltage_start || "");
+  data.append("battery_voltage_end", formData.battery_voltage_end || "");
+  data.append("voltage_dip", formData.lowest_battery_voltage_dip || "");
 
-      Object.entries(formData).forEach(([key, value]) => {
-        if (key.startsWith('footer') || key.startsWith('unit')) return;
-        const [section, index] = key.split('-');
-        const description =
-          sections.find((s) => s.title === section)?.items[index] || '';
-
-        if (
-          section !== 'Load Test' ||
-          ![
-            'Test Time Start',
-            'Test Time End',
-            'Load',
-            'Battery Voltage at Start',
-            'Battery Voltage at End',
-            'Lowest Battery Voltage Dip',
-          ].includes(description)
-        ) {
-          items.push({
-            section,
-            description,
-            status: value.status || '',
-            remarks: value.remarks || '',
-          });
-        }
+  // ✅ Build items from sections
+  const items = [];
+  Object.entries(sections).forEach(([section, questions]) => {
+    questions.forEach((q) => {
+      items.push({
+        section,
+        description: q,
+        status: formData[q + "_status"] || "NA",
+        remarks: formData[q + "_remarks"] || "",
       });
+    });
+  });
 
-      const formatToFullTime = (t) => (t.length === 5 ? `${t}:00` : t);
+  data.append("items", JSON.stringify(items));
 
-      const checklistData = {
-        unit_no: formData['unit-0']?.unit_no || '',
-        unit_model: formData['unit-1']?.unit_model || '',
-        test_time_start: formatToFullTime(
-          formData['Load Test-0']?.status || ''
-        ),
-        test_time_end: formatToFullTime(formData['Load Test-1']?.status || ''),
-        load: formData['Load Test-2']?.status || '',
-        battery_voltage_start: formData['Load Test-3']?.status || '',
-        battery_voltage_end: formData['Load Test-4']?.status || '',
-        voltage_dip: formData['Load Test-5']?.status || '',
-        unit_status: formData['footer-3']?.unit_status || '',
-        tested_by: formData['footer-0']?.tested_by || '',
-        date:
-          formData['footer-1']?.date || new Date().toISOString().split('T')[0],
-        items,
-        batteries: Object.entries(batteryVoltages).map(
-          ([battery_number, voltage]) => ({
-            battery_number: parseInt(battery_number),
-            voltage: parseFloat(voltage),
-          })
-        ),
-      };
-
-      await axiosInstance.post('/checklists/', checklistData);
-
-      alert('Checklist submitted successfully!');
-
-      setFormData({});
-      setBatteryVoltages({});
-      setTestTime('');
-      fetchChecklists(currentPage);
-    } catch (error) {
-      console.error('Error submitting checklist:', error);
-      alert('Submission failed. Please try again.');
+  // ✅ Build batteries from inputs
+  const batteries = [];
+  for (let i = 1; i <= batteryCount; i++) {
+    if (formData[`battery_${i}`]) {
+      batteries.push({
+        battery_number: i,
+        voltage: formData[`battery_${i}`],
+      });
     }
-  };
+  }
 
-  const toggleChecklistDetails = (id) => {
-    setExpandedChecklistId((prevId) => (prevId === id ? null : id));
-  };
+  data.append("batteries", JSON.stringify(batteries));
+
+  // ✅ Use `images` state (not formData.images)
+  images.forEach((image) => {
+    data.append("images", image);
+  });
+
+  try {
+    await axiosInstance.post("/checklists/", data, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    alert("Checklist submitted successfully!");
+    setFormData({});
+    setImages([]);
+    setSelectedInverter(null);
+    if (fileInputRef.current) {
+  fileInputRef.current.value = "";
+}
+    navigate("/employee-dashboard/submitted-checklists");
+  } catch (error) {
+    console.error("Error submitting checklist:", error.response?.data);
+  }
+};
+
+
+
 
   return (
-    <div className="p-6 bg-gray-100 min-h-screen">
-      <form onSubmit={handleSubmit}>
-        <h2 className="text-center text-2xl font-bold mb-6 bg-green-500 text-white py-2">
-          Pre Hire Checklist
-        </h2>
+    <form
+      onSubmit={handleSubmit}
+      className="max-w-full mx-auto p-6 bg-white border border-black"
+    >
+      <h2 className="text-2xl font-bold mb-6 text-center uppercase">
+        Pre Hire Checklist
+      </h2>
 
-        <table className="w-full table-auto border border-gray-400 bg-white">
-          <thead>
-            <tr className="bg-gray-200">
-              <th className="border px-4 py-2 text-left">Question</th>
-              <th className="border px-4 py-2 text-left">Status</th>
-              <th className="border px-4 py-2 text-left">Remarks</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="border px-4 py-2 font-semibold">Unit No</td>
-              <td colSpan={2}>
-                <input
-                  className="w-full px-2 py-1 border"
-                  value={formData['unit-0']?.unit_no || ''}
-                  onChange={(e) =>
-                    handleChange('unit', 0, 'unit_no', e.target.value)
-                  }
-                />
-              </td>
-            </tr>
-            <tr>
-              <td className="border px-4 py-2 font-semibold">Unit Model</td>
-              <td colSpan={2}>
-                <input
-                  className="w-full px-2 py-1 border"
-                  value={formData['unit-1']?.unit_model || ''}
-                  onChange={(e) =>
-                    handleChange('unit', 1, 'unit_model', e.target.value)
-                  }
-                />
-              </td>
-            </tr>
+      {/* Top Info Table */}
+      <table className="w-full border border-black text-sm mb-6">
+        <tbody>
+          <tr>
+            <td className="border border-black p-2 w-1/4 font-bold">Unit No</td>
+            <td className="border border-black p-2 w-1/4">
+              <select
+                value={formData.inverter || ""}
+                onChange={handleInverterSelect}
+                className="border border-black p-1 w-full"
+                required
+              >
+                <option value="">Select Unit No</option>
+                {inverters.map((inv) => (
+                  <option key={inv.id} value={inv.id}>
+                    {inv.unit_id}
+                  </option>
+                ))}
+              </select>
+            </td>
+            <td className="border border-black p-2 w-1/4 font-bold">
+              Unit Model
+            </td>
+            <td className="border border-black p-2 w-1/4">
+              <input
+                type="text"
+                value={formData.unit_model || ""}
+                disabled
+                className="border border-black p-1 w-full bg-gray-100"
+              />
+            </td>
+          </tr>
+          <tr>
+            <td className="border border-black p-2 font-bold">Tested By</td>
+            <td className="border border-black p-2">
+              <input
+                type="text"
+                value={formData.tested_by || ""}
+                onChange={(e) => handleChange("tested_by", e.target.value)}
+                className="border border-black p-1 w-full"
+              />
+            </td>
+            <td className="border border-black p-2 font-bold">Date</td>
+            <td className="border border-black p-2">
+              <input
+                type="date"
+                value={formData.date || ""}
+                onChange={(e) => handleChange("date", e.target.value)}
+                className="border border-black p-1 w-full"
+              />
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-            {sections.map((section, sIdx) => (
-              <React.Fragment key={sIdx}>
-                {/* <tr className="bg-yellow-200 font-semibold">
-                  <td colSpan={3} className="px-4 py-2">
-                    {section.title}
+      {/* Checklist Sections */}
+      {Object.entries(sections).map(([title, questions]) => (
+        <div key={title} className="mb-6">
+          <h3 className="text-base font-bold uppercase text-center border border-black bg-gray-200 p-2">
+            {title}
+          </h3>
+          <table className="w-full border border-black text-sm">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="border border-black p-2 text-center w-2/4">
+                  Check
+                </th>
+                <th className="border border-black p-2 text-center w-1/4">
+                  Status
+                </th>
+                <th className="border border-black p-2 text-center w-1/4">
+                  Remarks
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {questions.map((q, idx) => (
+                <tr key={idx}>
+                  <td className="border border-black p-2 text-left">{q}</td>
+                  <td className="border border-black p-2 text-center">
+                    <select
+                      value={formData[q + "_status"] || ""}
+                      onChange={(e) =>
+                        handleChange(q + "_status", e.target.value)
+                      }
+                      className="border border-black p-1 w-full text-center"
+                    >
+                      <option value="">-</option>
+                      <option value="OK">OK</option>
+                      <option value="NOT_OK">Not OK</option>
+                      <option value="NA">N/A</option>
+                    </select>
                   </td>
-                </tr> */}
-                <tr className="bg-light">
-                  <td colSpan={3} className="fw-bold px-3 py-2 text-dark">
-                    {section.title}
+                  <td className="border border-black p-2">
+                    <input
+                      type="text"
+                      value={formData[q + "_remarks"] || ""}
+                      onChange={(e) =>
+                        handleChange(q + "_remarks", e.target.value)
+                      }
+                      className="border border-black p-1 w-full"
+                    />
                   </td>
                 </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
 
-                {section.items.map((item, iIdx) => (
-                  <tr key={iIdx}>
-                    <td className="border px-4 py-2">{item}</td>
-                    <td className="border px-4 py-2">
-                      {section.title === 'Load Test' ? (
-                        <input
-                          type={
-                            item.toLowerCase().includes('time')
-                              ? 'time'
-                              : 'text'
-                          }
-                          className="w-full px-2 py-1 border"
-                          value={
-                            formData[`${section.title}-${iIdx}`]?.status || ''
-                          }
-                          onChange={(e) =>
-                            handleChange(
-                              section.title,
-                              iIdx,
-                              'status',
-                              e.target.value
-                            )
-                          }
-                        />
-                      ) : (
-                        <select
-                          className="w-full px-2 py-1 border"
-                          value={
-                            formData[`${section.title}-${iIdx}`]?.status || ''
-                          }
-                          onChange={(e) =>
-                            handleChange(
-                              section.title,
-                              iIdx,
-                              'status',
-                              e.target.value
-                            )
-                          }
-                        >
-                          <option value="">Select</option>
-                          {statusOptions.map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </td>
-                    <td className="border px-4 py-2">
-                      <input
-                        className="w-full px-2 py-1 border"
-                        placeholder="Remarks"
-                        value={
-                          formData[`${section.title}-${iIdx}`]?.remarks || ''
-                        }
-                        onChange={(e) =>
-                          handleChange(
-                            section.title,
-                            iIdx,
-                            'remarks',
-                            e.target.value
-                          )
-                        }
-                      />
-                    </td>
-                  </tr>
-                ))}
-
-                {section.title === 'Battery System' && (
-                  <>
-                    {/* <tr className="bg-blue-100 font-semibold">
-                      <td colSpan={3}>Battery Voltages</td>
-                    </tr> */}
-                    <tr className="bg-light">
-                      <td colSpan={3} className="fw-bold px-3 py-2 text-dark">
-                        Battery Voltages
-                      </td>
-                    </tr>
-                    {Array.from({ length: 25 }, (_, i) => (
-                      <tr key={`battery-${i + 1}`}>
-                        <td className="border px-4 py-2">{`Battery ${
-                          i + 1
-                        }`}</td>
-                        <td colSpan={2} className="border px-4 py-2">
-                          <input
-                            type="text"
-                            className="w-full px-2 py-1 border"
-                            placeholder="Enter Voltage"
-                            value={batteryVoltages[i + 1] || ''}
-                            onChange={(e) =>
-                              handleBatteryChange(i + 1, e.target.value)
-                            }
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </>
-                )}
-              </React.Fragment>
-            ))}
-
-            {/* Footer Section */}
+      {/* Load Test */}
+      <div className="mb-6">
+        <h3 className="text-base font-bold uppercase text-center border border-black bg-gray-200 p-2">
+          Load Test
+        </h3>
+        <table className="w-full border border-black text-sm">
+          <tbody>
             <tr>
-              <td className="border px-4 py-2 font-semibold">Tested By</td>
-              <td colSpan={2}>
+              <td className="border border-black p-2 w-1/2">Test Time Start</td>
+              <td className="border border-black p-2">
                 <input
-                  className="w-full px-2 py-1 border"
-                  value={formData['footer-0']?.tested_by || ''}
+                  type="datetime-local"
+                  value={formData.test_time_start || ""}
                   onChange={(e) =>
-                    handleChange('footer', 0, 'tested_by', e.target.value)
+                    handleChange("test_time_start", e.target.value)
                   }
+                  className="border border-black p-1 w-full"
                 />
               </td>
             </tr>
             <tr>
-              <td className="border px-4 py-2 font-semibold">Date</td>
-              <td colSpan={2}>
+              <td className="border border-black p-2">Test Time End</td>
+              <td className="border border-black p-2">
                 <input
-                  type="date"
-                  className="w-full px-2 py-1 border"
-                  value={formData['footer-1']?.date || ''}
+                  type="datetime-local"
+                  value={formData.test_time_end || ""}
                   onChange={(e) =>
-                    handleChange('footer', 1, 'date', e.target.value)
+                    handleChange("test_time_end", e.target.value)
                   }
+                  className="border border-black p-1 w-full"
                 />
               </td>
             </tr>
             <tr>
-              <td className="border px-4 py-2 font-semibold">Test Time</td>
-              <td colSpan={2} className="border px-4 py-2 text-gray-800">
-                {testTime || '—'}
+              <td className="border border-black p-2">Load</td>
+              <td className="border border-black p-2">
+                <input
+                  type="number"
+                  value={formData.load || ""}
+                  onChange={(e) => handleChange("load", e.target.value)}
+                  className="border border-black p-1 w-full"
+                />
               </td>
             </tr>
             <tr>
-              <td className="border px-4 py-2 font-semibold">Unit Status</td>
-              <td colSpan={2}>
+              <td className="border border-black p-2">Test Time</td>
+              <td className="border border-black p-2">
+                <input
+                  type="text"
+                  value={formData.test_time || ""}
+                  disabled
+                  className="border border-black p-1 w-full bg-gray-100"
+                />
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-black p-2">
+                Battery Voltage at Start
+              </td>
+              <td className="border border-black p-2">
+                <input
+                  type="number"
+                  value={formData.battery_voltage_start || ""}
+                  onChange={(e) =>
+                    handleChange("battery_voltage_start", e.target.value)
+                  }
+                  className="border border-black p-1 w-full"
+                />
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-black p-2">
+                Battery Voltage at End
+              </td>
+              <td className="border border-black p-2">
+                <input
+                  type="number"
+                  value={formData.battery_voltage_end || ""}
+                  onChange={(e) =>
+                    handleChange("battery_voltage_end", e.target.value)
+                  }
+                  className="border border-black p-1 w-full"
+                />
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-black p-2">
+                Lowest Battery Voltage Dip
+              </td>
+              <td className="border border-black p-2">
+                <input
+                  type="number"
+                  value={formData.lowest_battery_voltage_dip || ""}
+                  onChange={(e) =>
+                    handleChange("lowest_battery_voltage_dip", e.target.value)
+                  }
+                  className="border border-black p-1 w-full"
+                />
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-black p-2">Unit Status</td>
+              <td className="border border-black p-2">
                 <select
-                  className="w-full px-2 py-1 border"
-                  value={formData['footer-3']?.unit_status || ''}
-                  onChange={(e) =>
-                    handleChange('footer', 3, 'unit_status', e.target.value)
-                  }
+                  value={formData.unit_status || ""}
+                  onChange={(e) => handleChange("unit_status", e.target.value)}
+                  className="border border-black p-1 w-full"
+                  required
                 >
                   <option value="">Select Status</option>
-                  <option value="Ready for Hire">Ready for Hire</option>
-                  <option value="Under Maintenance">Under Maintenance</option>
+                  <option value="Operational(Ready to Hire)">
+                    Operational(Ready to Hire)
+                  </option>
+                  <option value="Under Maintenance">
+                    Under Maintenance
+                  </option>
                 </select>
               </td>
             </tr>
           </tbody>
         </table>
-
-        {/* <div className="mt-6 text-right">
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            Submit
-          </button>
-        </div> */}
-
-        <div className="mt-6">
-          <MDBBtn
-            type="submit"
-            className="mt-3"
-            style={{
-              backgroundColor: 'rgb(13, 110, 253)',
-              color: '#ffffff',
-            }}
-          >
-            Submit
-          </MDBBtn>
-        </div>
-      </form>
-
-      {/* ✅ Submitted Checklists Table */}
-      <div className="mt-5 bg-white shadow-md rounded">
-        <h3 className="text-lg font-semibold mb-4">Submitted Checklists</h3>
-
-        <table className="w-full border table-auto">
-          <thead className="bg-gray-200">
-            <tr>
-              <th className="border px-2 py-1">Unit No</th>
-              <th className="border px-2 py-1">Tested By</th>
-              <th className="border px-2 py-1">Date</th>
-              <th className="border px-2 py-1">Status</th>
-              <th className="border px-2 py-1">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {submittedChecklists.map((checklist) => (
-              <React.Fragment key={checklist.id}>
-                <tr>
-                  <td className="border px-2 py-1">{checklist.unit_no}</td>
-                  <td className="border px-2 py-1">{checklist.tested_by}</td>
-                  <td className="border px-2 py-1">{checklist.date}</td>
-                  <td className="border px-2 py-1">{checklist.unit_status}</td>
-                  <td className="border px-2 py-1 text-center">
-                    {/* <button
-                      className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
-                      onClick={() => toggleChecklistDetails(checklist.id)}
-                    >
-                      {expandedChecklistId === checklist.id ? 'Hide' : 'View'}
-                    </button> */}
-                    <MDBBtn
-                      size="sm"
-                      style={{
-                        backgroundColor: 'rgb(13, 110, 253)',
-                        color: '#ffffff',
-                        padding: '0.25rem 0.75rem',
-                        borderRadius: '0.375rem',
-                      }}
-                      onClick={() => toggleChecklistDetails(checklist.id)}
-                    >
-                      {expandedChecklistId === checklist.id ? 'Hide' : 'View'}
-                    </MDBBtn>
-                  </td>
-                </tr>
-
-                {expandedChecklistId === checklist.id && (
-                  <tr>
-                    <td colSpan={5} className="border px-4 py-2 bg-gray-50">
-                      <div className="text-left text-sm space-y-2">
-                        <p>
-                          <strong>Model:</strong> {checklist.unit_model}
-                        </p>
-                        <p>
-                          <strong>Load:</strong> {checklist.load}
-                        </p>
-                        <p>
-                          <strong>Battery Start:</strong>{' '}
-                          {checklist.battery_voltage_start}
-                        </p>
-                        <p>
-                          <strong>Battery End:</strong>{' '}
-                          {checklist.battery_voltage_end}
-                        </p>
-                        <p>
-                          <strong>Voltage Dip:</strong> {checklist.voltage_dip}
-                        </p>
-                        <p>
-                          <strong>Test Time Start:</strong>{' '}
-                          {checklist.test_time_start}
-                        </p>
-                        <p>
-                          <strong>Test Time End:</strong>{' '}
-                          {checklist.test_time_end}
-                        </p>
-                        <p>
-                          <strong>Calculated Test Time:</strong>{' '}
-                          {calculateTestTime(
-                            checklist.test_time_start?.slice(0, 5) || '',
-
-                            checklist.test_time_end?.slice(0, 5) || ''
-                          )}
-                        </p>
-
-                        {checklist.items?.length > 0 && (
-                          <div>
-                            <strong>Checklist Items:</strong>
-                            <ul className="list-disc ml-6">
-                              {checklist.items.map((item, index) => (
-                                <li key={index}>
-                                  <span className="font-medium">
-                                    {item.section}:
-                                  </span>{' '}
-                                  {item.description} – <em>{item.status}</em>{' '}
-                                  {item.remarks && `(${item.remarks})`}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {checklist.batteries?.length > 0 && (
-                          <div className="mt-4">
-                            <strong>Battery Voltages:</strong>
-
-                            <table className="table-auto border border-gray-300 mt-2 w-full text-center text-sm">
-                              <thead>
-                                <tr className="bg-gray-200">
-                                  <th className="border px-2 py-1">
-                                    Battery No
-                                  </th>
-
-                                  <th className="border px-2 py-1">Voltage</th>
-                                </tr>
-                              </thead>
-
-                              <tbody>
-                                {checklist.batteries
-
-                                  .sort(
-                                    (a, b) =>
-                                      a.battery_number - b.battery_number
-                                  )
-
-                                  .map((battery, index) => (
-                                    <tr key={index}>
-                                      <td className="border px-2 py-1">
-                                        Battery {battery.battery_number}
-                                      </td>
-
-                                      <td className="border px-2 py-1">
-                                        {battery.voltage}
-                                      </td>
-                                    </tr>
-                                  ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Pagination Controls */}
-        <div className="mt-4 flex justify-center space-x-2">
-          {Array.from({ length: totalPages }, (_, i) => (
-            <button
-              key={i}
-              onClick={() => setCurrentPage(i + 1)}
-              className={`px-3 py-1 rounded ${
-                currentPage === i + 1 ? 'bg-blue-600 text-white' : 'bg-gray-200'
-              }`}
-            >
-              {i + 1}
-            </button>
-          ))}
-        </div>
       </div>
-    </div>
+
+   <div className="mb-6">
+  <h3 className="text-base font-bold uppercase text-center border border-black bg-gray-200 p-2">
+    Battery Voltages
+  </h3>
+  <table className="w-full border border-black text-sm table-fixed">
+    <thead className="bg-gray-100">
+      <tr>
+        {Array.from({ length: 5 }, (_, colIdx) => (
+          <React.Fragment key={colIdx}>
+            <th className="border border-black p-2 text-center w-[10%]">Battery</th>
+            <th className="border border-black p-2 text-center w-[10%]">Voltage</th>
+          </React.Fragment>
+        ))}
+      </tr>
+    </thead>
+    <tbody>
+      {Array.from({ length: 5 }, (_, rowIdx) => (
+        <tr key={rowIdx}>
+          {Array.from({ length: 5 }, (_, colIdx) => {
+            const i = rowIdx + colIdx * 5 + 1; // calculate battery number
+            return (
+              <React.Fragment key={i}>
+                <td className="border border-black p-2 text-center">
+                  Battery {i}
+                </td>
+                <td className="border border-black p-2 text-center">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData[`battery_${i}`] || ""}
+                    onChange={(e) =>
+                      handleChange(`battery_${i}`, e.target.value)
+                    }
+                    className="border border-black p-1 w-full text-center"
+                  />
+                </td>
+              </React.Fragment>
+            );
+          })}
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+
+
+{/* Image upload section */}
+<div>
+  <label>Upload Images:</label>
+  <input
+    type="file"
+    multiple
+    accept="image/*"
+    ref={fileInputRef}
+    onChange={(e) => setImages(Array.from(e.target.files))}
+  />
+</div>
+
+
+
+
+      {/* Submit Button */}
+      <div className="flex justify-end mt-6">
+        <button
+          type="submit"
+          className="bg-blue-600 text-white font-semibold px-6 py-2 rounded shadow hover:bg-blue-700"
+        >
+          Submit Checklist
+        </button>
+      </div>
+    </form>
   );
 };
 
