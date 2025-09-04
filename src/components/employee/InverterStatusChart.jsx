@@ -17,6 +17,27 @@ const COLORS = {
   Hired: '#008000',
 };
 
+// Normalize status only for display in chart
+const normalizeStatus = (status) => {
+  if (!status) return 'Unknown';
+  const s = status.trim().toLowerCase();
+  if (s.includes('operational') || s.includes('ready to hire')) return 'Operational(Ready to Hire)';
+  if (s.includes('testing')) return 'Testing';
+  if (s.includes('breakdown')) return 'Breakdown';
+  if (s.includes('hired')) return 'Hired';
+  return status;
+};
+
+// Helper to group inverters by key
+const groupInvertersBy = (list, keyFn) => {
+  return list.reduce((acc, item) => {
+    const key = keyFn(item);
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(item);
+    return acc;
+  }, {});
+};
+
 const renderCustomizedLabel = ({
   cx,
   cy,
@@ -44,24 +65,6 @@ const renderCustomizedLabel = ({
   );
 };
 
-// Normalize status only for pie chart display
-const normalizeStatus = (status) => {
-  if (!status) return status;
-  const s = status.trim().toLowerCase();
-  if (s.includes('operational') || s.includes('ready to hire')) return 'Operational(Ready to Hire)';
-  return status;
-};
-
-// Helper to group inverters by key
-const groupInvertersBy = (list, keyFn) => {
-  return list.reduce((acc, item) => {
-    const key = keyFn(item);
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(item);
-    return acc;
-  }, {});
-};
-
 const InverterStatusChart = ({ mode = 'employee' }) => {
   const [data, setData] = useState([]);
   const [selectedStatus, setSelectedStatus] = useState(null);
@@ -76,22 +79,39 @@ const InverterStatusChart = ({ mode = 'employee' }) => {
   };
 
   const fetchInvertersByStatus = async (status) => {
-    try {
-      let apiStatus = status;
-      // Admin only sees Operational(Ready to Hire)
-      if (mode === 'admin') apiStatus = 'Operational(Ready to Hire)';
+  try {
+    setSelectedStatus(status);
 
-      const response = await axiosInstance.get(
-        `/inverters/?inverter_status__inverter_status_name=${encodeURIComponent(apiStatus)}`
+    let response;
+
+    if (mode === 'admin') {
+      // Admin sees only Operational(Ready to Hire)
+      response = await axiosInstance.get(
+        `/inverters/?status=Operational(Ready to Hire)`
       );
+      setInverterList(response.data.results || []);
+    } else {
+      // Employee: map normalized status to backend variants
+      const statusMapping = {
+        'Operational(Ready to Hire)': ['Operational(Ready to Hire)'],
+        'Breakdown': ['Breakdown'],
+        'Testing': ['Testing'],
+        'Hired': ['Hired'],
+      };
 
-      setSelectedStatus(apiStatus);
-      setInverterList(response.data.results);
-    } catch (error) {
-      console.error('Failed to fetch inverters by status:', error);
-      setInverterList([]);
+      const filterStatuses = statusMapping[status] || [status];
+      const query = `status=${filterStatuses.map((s) => encodeURIComponent(s)).join(',')}`;
+
+      response = await axiosInstance.get(`/inverters/?${query}`);
+      setInverterList(response.data.results || []);
     }
-  };
+  } catch (error) {
+    console.error('Failed to fetch inverters by status:', error);
+    setInverterList([]);
+  }
+};
+
+
 
   useEffect(() => {
     const fetchSummaryAndDefault = async () => {
@@ -99,6 +119,7 @@ const InverterStatusChart = ({ mode = 'employee' }) => {
         const response = await axiosInstance.get('/api/inverter-status-summary/');
         const result = response.data;
 
+        // Aggregate statuses for pie chart
         const transformed = Object.keys(result).reduce((acc, status) => {
           const normalized = normalizeStatus(status);
           const existing = acc.find((item) => item.name === normalized);
@@ -112,6 +133,7 @@ const InverterStatusChart = ({ mode = 'employee' }) => {
 
         setData(transformed);
 
+        // Admin default view: Operational(Ready to Hire)
         if (mode === 'admin') {
           fetchInvertersByStatus('Operational(Ready to Hire)');
         }
@@ -132,7 +154,7 @@ const InverterStatusChart = ({ mode = 'employee' }) => {
 
   return (
     <div style={{ width: '100%', textAlign: 'center', paddingBottom: '2rem' }}>
-      {/* Pie Chart */}
+      {/* Pie Chart for employees */}
       {mode !== 'admin' && (
         <div className="d-flex justify-content-center align-items-start gap-4 flex-wrap">
           <div style={{ width: '400px', height: 400 }}>
