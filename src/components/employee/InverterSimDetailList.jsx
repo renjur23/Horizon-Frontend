@@ -28,6 +28,7 @@ const InverterSimDetailList = () => {
   const [count, setCount] = useState(0);
   const [pageSize] = useState(20);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortConfig, setSortConfig] = useState({ key: '', direction: '' });
 
   const totalPages = Math.ceil(count / pageSize);
 
@@ -114,6 +115,38 @@ const InverterSimDetailList = () => {
     if (currentPage > 1) fetchSimDetails(currentPage - 1, searchQuery);
   };
 
+  // Sorting function
+  const sortData = (key) => {
+    let direction = 'ascending';
+    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+
+    const sorted = [...simDetails].sort((a, b) => {
+      let aValue = a[key];
+      let bValue = b[key];
+
+      // If sorting by inverter, convert to name
+      if (key === 'inverter_id') {
+        aValue = inverters.find(i => i.id === a[key])?.given_name || '';
+        bValue = inverters.find(i => i.id === b[key])?.given_name || '';
+      }
+
+      // For dates
+      if (key === 'installation_date') {
+        aValue = new Date(aValue);
+        bValue = new Date(bValue);
+      }
+
+      if (aValue < bValue) return direction === 'ascending' ? -1 : 1;
+      if (aValue > bValue) return direction === 'ascending' ? 1 : -1;
+      return 0;
+    });
+
+    setSimDetails(sorted);
+    setSortConfig({ key, direction });
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-4">
       {/* Add SIM Form */}
@@ -152,8 +185,6 @@ const InverterSimDetailList = () => {
           />
       </div>
 
-
-
       {/* SIM Table */}
       <MDBCard>
         <MDBCardBody>
@@ -162,11 +193,21 @@ const InverterSimDetailList = () => {
             <MDBTableHead light>
               <tr>
                 <th>SI No</th>
-                <th>Inverter</th>
-                <th>Phone Number</th>
-                <th>SIM Serial No</th>
-                <th>User No</th>
-                <th>Installation Date</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => sortData('inverter_id')}>
+                  Inverter {sortConfig.key === 'inverter_id' ? (sortConfig.direction === 'ascending' ? '⬆️' : '⬇️') : ''}
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => sortData('phone_number')}>
+                  Phone Number {sortConfig.key === 'phone_number' ? (sortConfig.direction === 'ascending' ? '⬆️' : '⬇️') : ''}
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => sortData('serial_no')}>
+                  SIM Serial No {sortConfig.key === 'serial_no' ? (sortConfig.direction === 'ascending' ? '⬆️' : '⬇️') : ''}
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => sortData('user_no')}>
+                  User No {sortConfig.key === 'user_no' ? (sortConfig.direction === 'ascending' ? '⬆️' : '⬇️') : ''}
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => sortData('installation_date')}>
+                  Installation Date {sortConfig.key === 'installation_date' ? (sortConfig.direction === 'ascending' ? '⬆️' : '⬇️') : ''}
+                </th>
                 <th>Remarks</th>
                 <th>Actions</th>
               </tr>
