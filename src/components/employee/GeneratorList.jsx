@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import axiosInstance from '../../api/axiosInstance';
-import { Pencil } from 'lucide-react';
 import {
   MDBCard,
   MDBCardBody,
@@ -19,9 +18,11 @@ const GeneratorList = () => {
   const [nextPage, setNextPage] = useState(null);
   const [prevPage, setPrevPage] = useState(null);
   const [count, setCount] = useState(0);
-  const [searchQuery, setSearchQuery] = useState(''); // ✅ Added search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const pageSize = 20;
 
+  // Fetch generators
   const fetchGenerators = async (page = 1) => {
     try {
       const res = await axiosInstance.get(`/generators/?page=${page}`);
@@ -42,6 +43,7 @@ const GeneratorList = () => {
     fetchGenerators();
   }, []);
 
+  // Edit logic
   const handleEdit = (generator) => {
     setEditingId(generator.id);
     setEditData({ ...generator });
@@ -73,29 +75,40 @@ const GeneratorList = () => {
     try {
       await axiosInstance.delete(`/generators/${id}/`);
       alert('Generator deleted successfully.');
-      fetchGenerators(currentPage); // refresh list
+      fetchGenerators(currentPage);
     } catch (error) {
       console.error('Delete failed:', error);
       alert('Delete failed.');
     }
   };
 
+  // Pagination
   const goToNextPage = () => {
-  if (nextPage) {
-    const nextPageNum = parseInt(new URL(nextPage).searchParams.get('page')) || currentPage + 1;
-    fetchGenerators(nextPageNum);
-  }
-};
+    if (nextPage) {
+      const nextPageNum =
+        parseInt(new URL(nextPage).searchParams.get('page')) || currentPage + 1;
+      fetchGenerators(nextPageNum);
+    }
+  };
 
-const goToPrevPage = () => {
-  if (prevPage) {
-    const prevPageNum = parseInt(new URL(prevPage).searchParams.get('page')) || 1;
-    fetchGenerators(prevPageNum);
-  }
-};
+  const goToPrevPage = () => {
+    if (prevPage) {
+      const prevPageNum =
+        parseInt(new URL(prevPage).searchParams.get('page')) || 1;
+      fetchGenerators(prevPageNum);
+    }
+  };
 
+  // Sorting
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
 
-  // ✅ Filtered generator list
+  // Filtered and sorted generators
   const filteredGenerators = generators.filter((gen) => {
     const query = searchQuery.toLowerCase();
     return (
@@ -105,6 +118,25 @@ const goToPrevPage = () => {
     );
   });
 
+  const sortedGenerators = useMemo(() => {
+    let sortableItems = [...filteredGenerators];
+    if (sortConfig.key) {
+      sortableItems.sort((a, b) => {
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+
+        if (typeof aValue === 'string') {
+          return sortConfig.direction === 'asc'
+            ? aValue.localeCompare(bValue)
+            : bValue.localeCompare(aValue);
+        } else {
+          return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue;
+        }
+      });
+    }
+    return sortableItems;
+  }, [filteredGenerators, sortConfig]);
+
   return (
     <div className="max-w-7xl mx-auto mt-10 px-4">
       <MDBCard className="shadow-sm mb-4">
@@ -113,7 +145,7 @@ const goToPrevPage = () => {
             🔌 Generator List
           </MDBCardTitle>
 
-          {/* ✅ Search Input */}
+          {/* Search Input */}
           <input
             type="text"
             placeholder="Search by Generator No, Size or Fuel Consumption"
@@ -122,7 +154,7 @@ const goToPrevPage = () => {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
 
-          {filteredGenerators.length === 0 ? (
+          {sortedGenerators.length === 0 ? (
             <p className="text-muted text-center">No generators found.</p>
           ) : (
             <div className="table-responsive">
@@ -130,17 +162,46 @@ const goToPrevPage = () => {
                 <MDBTableHead light>
                   <tr>
                     <th>Si. No</th>
-                    <th>Generator No</th>
-                    <th>Size</th>
-                    <th>Fuel Consumption</th>
+                    <th
+                      onClick={() => handleSort('generator_no')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      Generator No{' '}
+                      {sortConfig.key === 'generator_no'
+                        ? sortConfig.direction === 'asc'
+                          ? '▲'
+                          : '▼'
+                        : ''}
+                    </th>
+                    <th
+                      onClick={() => handleSort('generator_size')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      Size{' '}
+                      {sortConfig.key === 'generator_size'
+                        ? sortConfig.direction === 'asc'
+                          ? '▲'
+                          : '▼'
+                        : ''}
+                    </th>
+                    <th
+                      onClick={() => handleSort('fuel_consumption')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      Fuel Consumption{' '}
+                      {sortConfig.key === 'fuel_consumption'
+                        ? sortConfig.direction === 'asc'
+                          ? '▲'
+                          : '▼'
+                        : ''}
+                    </th>
                     <th>Edit</th>
                     <th>Delete</th>
                   </tr>
                 </MDBTableHead>
                 <MDBTableBody>
-                  {filteredGenerators.map((gen, index) => {
-                    const serialNumber =
-                      (currentPage - 1) * pageSize + index + 1;
+                  {sortedGenerators.map((gen, index) => {
+                    const serialNumber = (currentPage - 1) * pageSize + index + 1;
                     return (
                       <tr key={gen.id}>
                         {editingId === gen.id ? (
@@ -193,8 +254,7 @@ const goToPrevPage = () => {
                                 className="text-white"
                                 onClick={() => handleEdit(gen)}
                               >
-                               <i className="fas fa-pen"></i>
-
+                                <i className="fas fa-pen"></i>
                               </MDBBtn>
                             </td>
                             <td className="text-center">
@@ -203,7 +263,7 @@ const goToPrevPage = () => {
                                 color="danger"
                                 onClick={() => handleDelete(gen.id)}
                               >
-                                 <i className="fas fa-trash"></i>
+                                <i className="fas fa-trash"></i>
                               </MDBBtn>
                             </td>
                           </>

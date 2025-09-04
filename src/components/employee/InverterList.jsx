@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import axiosInstance from '../../api/axiosInstance';
-import { Pencil } from 'lucide-react';
 import {
   MDBCard,
   MDBCardBody,
@@ -21,6 +20,7 @@ const InverterList = () => {
   const [prevPage, setPrevPage] = useState(null);
   const [count, setCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const pageSize = 20;
 
   useEffect(() => {
@@ -30,7 +30,9 @@ const InverterList = () => {
 
   const fetchInverters = async (page = 1, query = '') => {
     try {
-      const response = await axiosInstance.get(`/inverters/?page=${page || 1}&search=${query}`);
+      const response = await axiosInstance.get(
+        `/inverters/?page=${page}&search=${query}`
+      );
       setInverters(response.data.results || []);
       setNextPage(response.data.next);
       setPrevPage(response.data.previous);
@@ -100,54 +102,69 @@ const InverterList = () => {
     }
   };
 
-const goToNextPage = () => {
-  const totalPages = Math.ceil(count / pageSize); 
-  if (currentPage < totalPages) {
-    fetchInverters(currentPage + 1);
-  }
-};
+  const goToNextPage = () => {
+    const totalPages = Math.ceil(count / pageSize);
+    if (currentPage < totalPages) fetchInverters(currentPage + 1);
+  };
 
-const goToPrevPage = () => {
-  if (currentPage > 1) {
-    fetchInverters(currentPage - 1);
-  }
-};
-
-
+  const goToPrevPage = () => {
+    if (currentPage > 1) fetchInverters(currentPage - 1);
+  };
 
   const getSortableUnitId = (unit_id) => {
     const match = unit_id?.match(/(\d+\/\d+|\d+)/); // Match formats like "10/46" or "176"
     return match ? match[0] : unit_id;
   };
 
- const sortedInverters = [...inverters].sort((a, b) =>
-  getSortableUnitId(a.unit_id).localeCompare(
-    getSortableUnitId(b.unit_id),
-    undefined,
-    { numeric: true }
-  )
-);
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
 
-    // .filter((inv) => {
-    //   const query = searchQuery.toLowerCase();
-    //   return (
-    //     String(inv.unit_id || '')
-    //       .toLowerCase()
-    //       .includes(query) ||
-    //     String(inv.model || '')
-    //       .toLowerCase()
-    //       .includes(query) ||
-    //     String(inv.given_name || '')
-    //       .toLowerCase()
-    //       .includes(query) ||
-    //     String(inv.serial_no || '')
-    //       .toLowerCase()
-    //       .includes(query) ||
-    //     String(inv.inverter_status || '')
-    //       .toLowerCase()
-    //       .includes(query)
-    //   );
-    // });
+  const getStatusValue = (inv) => inv.inverter_status?.inverter_status_name || '';
+
+  const sortedInverters = [...inverters]
+    .sort((a, b) => getSortableUnitId(a.unit_id).localeCompare(getSortableUnitId(b.unit_id), undefined, { numeric: true }))
+    .sort((a, b) => {
+      if (!sortConfig.key) return 0;
+
+      let aValue, bValue;
+      switch (sortConfig.key) {
+        case 'unit_id':
+          aValue = getSortableUnitId(a.unit_id);
+          bValue = getSortableUnitId(b.unit_id);
+          break;
+        case 'model':
+          aValue = a.model || '';
+          bValue = b.model || '';
+          break;
+        case 'given_name':
+          aValue = a.given_name || '';
+          bValue = b.given_name || '';
+          break;
+        case 'serial_no':
+          aValue = a.serial_no || '';
+          bValue = b.serial_no || '';
+          break;
+        case 'status':
+          aValue = getStatusValue(a);
+          bValue = getStatusValue(b);
+          break;
+        default:
+          aValue = '';
+          bValue = '';
+      }
+
+      if (sortConfig.direction === 'asc') {
+        return aValue.toString().localeCompare(bValue.toString(), undefined, { numeric: true });
+      } else {
+        return bValue.toString().localeCompare(aValue.toString(), undefined, { numeric: true });
+      }
+    });
 
   return (
     <div className="max-w-7xl mx-auto px-4 mt-8">
@@ -157,14 +174,14 @@ const goToPrevPage = () => {
             🛠️ Battery List
           </MDBCardTitle>
 
-          {/* Search Bar */}
           <input
             type="text"
             placeholder="Search by Unit ID, Model, Given Name, Serial No or Status"
             className="form-control mb-3"
             value={searchQuery}
-            onChange={(e) => {setSearchQuery(e.target.value);
-            fetchInverters(1, e.target.value); 
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              fetchInverters(1, e.target.value);
             }}
           />
 
@@ -176,11 +193,21 @@ const goToPrevPage = () => {
                 <MDBTableHead light>
                   <tr>
                     <th>Si. No</th>
-                    <th>Unit ID</th>
-                    <th>Model</th>
-                    <th>Given Name</th>
-                    <th>Serial No</th>
-                    <th>Status</th>
+                    <th onClick={() => handleSort('unit_id')} style={{ cursor: 'pointer' }}>
+                      Unit ID {sortConfig.key === 'unit_id' ? (sortConfig.direction === 'asc' ? '⬆️' : '⬇️') : ''}
+                    </th>
+                    <th onClick={() => handleSort('model')} style={{ cursor: 'pointer' }}>
+                      Model {sortConfig.key === 'model' ? (sortConfig.direction === 'asc' ? '⬆️' : '⬇️') : ''}
+                    </th>
+                    <th onClick={() => handleSort('given_name')} style={{ cursor: 'pointer' }}>
+                      Given Name {sortConfig.key === 'given_name' ? (sortConfig.direction === 'asc' ? '⬆️' : '⬇️') : ''}
+                    </th>
+                    <th onClick={() => handleSort('serial_no')} style={{ cursor: 'pointer' }}>
+                      Serial No {sortConfig.key === 'serial_no' ? (sortConfig.direction === 'asc' ? '⬆️' : '⬇️') : ''}
+                    </th>
+                    <th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}>
+                      Status {sortConfig.key === 'status' ? (sortConfig.direction === 'asc' ? '⬆️' : '⬇️') : ''}
+                    </th>
                     <th>Remarks</th>
                     <th>Edit</th>
                     <th>Delete</th>
@@ -188,9 +215,7 @@ const goToPrevPage = () => {
                 </MDBTableHead>
                 <MDBTableBody>
                   {sortedInverters.map((inv, index) => {
- 
-                    const serialNumber =
-                      (currentPage - 1) * pageSize + index + 1;
+                    const serialNumber = (currentPage - 1) * pageSize + index + 1;
                     return (
                       <tr key={inv.id}>
                         {editingId === inv.id ? (
@@ -255,11 +280,7 @@ const goToPrevPage = () => {
                               />
                             </td>
                             <td className="text-center">
-                              <MDBBtn
-                                size="sm"
-                                color="success"
-                                onClick={handleSave}
-                              >
+                              <MDBBtn size="sm" color="success" onClick={handleSave}>
                                 Save
                               </MDBBtn>
                             </td>
@@ -272,7 +293,6 @@ const goToPrevPage = () => {
                             <td>{inv.given_name}</td>
                             <td>{inv.serial_no}</td>
                             <td>{inv.inverter_status?.inverter_status_name}</td>
-
                             <td>{inv.remarks}</td>
                             <td className="text-center">
                               <MDBBtn
@@ -282,7 +302,6 @@ const goToPrevPage = () => {
                                 onClick={() => handleEdit(inv)}
                               >
                                 <i className="fas fa-pen"></i>
-
                               </MDBBtn>
                             </td>
                             <td className="text-center">
@@ -291,7 +310,7 @@ const goToPrevPage = () => {
                                 color="danger"
                                 onClick={() => handleDelete(inv.id)}
                               >
-                               <i className="fas fa-trash"></i>
+                                <i className="fas fa-trash"></i>
                               </MDBBtn>
                             </td>
                           </>
@@ -306,26 +325,15 @@ const goToPrevPage = () => {
         </MDBCardBody>
       </MDBCard>
 
-      {/* Pagination */}
       <div className="d-flex justify-content-between items-center px-2 mb-5">
         <p className="text-muted">
-            Page {currentPage} of {Math.ceil(count / pageSize)}
+          Page {currentPage} of {Math.ceil(count / pageSize)}
         </p>
         <div className="d-flex gap-2">
-          <MDBBtn
-            size="sm"
-            color="light"
-            disabled={!prevPage}
-            onClick={goToPrevPage}
-          >
+          <MDBBtn size="sm" color="light" disabled={!prevPage} onClick={goToPrevPage}>
             ⬅️ Prev
           </MDBBtn>
-          <MDBBtn
-            size="sm"
-            color="light"
-            disabled={!nextPage}
-            onClick={goToNextPage}
-          >
+          <MDBBtn size="sm" color="light" disabled={!nextPage} onClick={goToNextPage}>
             Next ➡️
           </MDBBtn>
         </div>
