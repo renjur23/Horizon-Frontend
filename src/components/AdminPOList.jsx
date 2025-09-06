@@ -72,7 +72,7 @@ const AdminPOList = () => {
     setEditingId(order.id);
     setEditData({
       ...order,
-      location: order.location,
+      location: order.location ,
       inverter: order.inverter,
       generator: order.generator,
       site_contact: order.site_contact,
@@ -94,12 +94,20 @@ const AdminPOList = () => {
         remarks: editData.remarks,
         start_date: editData.start_date ||null,
         end_date: editData.end_date || null,
-        location: editData.location,
+        location_id: editData.location,
         inverter: editData.inverter,
-        generator: editData.generator,
-        site_contact: editData.site_contact,
+        generator_no: editData.generator,
+        site_contact_id: editData.site_contact,
       };
-      await axiosInstance.patch(`/orders/${editingId}/`, payload);
+     const response = await axiosInstance.patch(`/orders/${editingId}/`, payload);
+
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === editingId ? response.data : order
+        )
+      );
+
+
       alert('Order updated successfully');
       setEditingId(null);
       fetchOrders(currentPage);
