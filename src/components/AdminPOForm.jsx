@@ -80,8 +80,8 @@ const AdminPOForm = () => {
         `${import.meta.env.VITE_BASE_URL}/api/clients/`,
         {
           client_name: clientName,
-          client_contact: clientContact || null,
-          client_email: clientEmail || null,
+          client_contact: clientContact || "",
+          client_email: clientEmail || "",
         },
         {
           headers: {

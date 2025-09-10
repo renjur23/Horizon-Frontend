@@ -20,11 +20,14 @@ const SiteContactList = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [count, setCount] = useState(0);
   const [editingId, setEditingId] = useState(null);
+  const [errors, setErrors] = useState({});
+
   const [editData, setEditData] = useState({
     site_contact_name: '',
     site_contact_email: '',
     site_contact_number: '',
   });
+
   const [successMessage, setSuccessMessage] = useState('');
 
   const fetchContacts = async (page = 1) => {
@@ -45,22 +48,59 @@ const SiteContactList = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const validateFields = (data) => {
+  const newErrors = {};
+
+  // Name: letters + spaces
+  if (data.site_contact_name && !/^[A-Za-z\s]+$/.test(data.site_contact_name)) {
+    newErrors.site_contact_name = "Name can only contain letters and spaces.";
+  }
+
+  // Email: basic pattern
+  if (data.site_contact_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.site_contact_email)) {
+    newErrors.site_contact_email = "Invalid email format.";
+  }
+
+  // Number: 10–15 digits
+  if (data.site_contact_number && !/^\d{10,15}$/.test(data.site_contact_number)) {
+    newErrors.site_contact_number = "Contact number must be 10–15 digits.";
+  }
+
+  // Cross-field validation (all-or-nothing)
+  if ((data.site_contact_name || data.site_contact_email || data.site_contact_number) &&
+      (!data.site_contact_name || !data.site_contact_email || !data.site_contact_number)) {
+    newErrors.form = "Site contact name, email, and number must all be provided together.";
+  }
+
+  return newErrors;
+};
+
+
   const handleAddContact = async (e) => {
-    e.preventDefault();
-    try {
-      await axiosInstance.post('/site-contacts/', formData);
-      setFormData({
-        site_contact_name: '',
-        site_contact_email: '',
-        site_contact_number: '',
-      });
-      fetchContacts(currentPage);
-      setSuccessMessage('✅ Site contact details added successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
-    } catch (err) {
-      console.error('Error adding contact', err);
-    }
-  };
+  e.preventDefault();
+
+  const validationErrors = validateFields(formData);
+  if (Object.keys(validationErrors).length > 0) {
+    setErrors(validationErrors);
+    return;
+  }
+  setErrors({}); // clear errors if valid
+
+  try {
+    await axiosInstance.post('/site-contacts/', formData);
+    setFormData({
+      site_contact_name: '',
+      site_contact_email: '',
+      site_contact_number: '',
+    });
+    fetchContacts(currentPage);
+    setSuccessMessage('✅ Site contact details added successfully!');
+    setTimeout(() => setSuccessMessage(''), 3000);
+  } catch (err) {
+    console.error('Error adding contact', err);
+    alert("❌ Failed to add site contact.");
+  }
+};
 
   const handleEditClick = (contact) => {
     setEditingId(contact.id);
@@ -76,14 +116,25 @@ const SiteContactList = () => {
   };
 
   const handleSaveEdit = async (id) => {
-    try {
-      await axiosInstance.put(`/site-contacts/${id}/`, editData);
-      setEditingId(null);
-      fetchContacts(currentPage);
-    } catch (err) {
-      console.error('Error updating contact', err);
-    }
-  };
+  const validationErrors = validateFields(editData);
+  if (Object.keys(validationErrors).length > 0) {
+    setErrors(validationErrors);
+    return;
+  }
+  setErrors({});
+
+  try {
+    await axiosInstance.put(`/site-contacts/${id}/`, editData);
+    setEditingId(null);
+    fetchContacts(currentPage);
+    setSuccessMessage('✅ Site contact updated successfully!');
+    setTimeout(() => setSuccessMessage(''), 3000);
+  } catch (err) {
+    console.error('Error updating contact', err);
+    alert("❌ Failed to update site contact.");
+  }
+};
+
 
   const handleDeleteContact = async (id) => {
     try {
@@ -107,48 +158,47 @@ const SiteContactList = () => {
           </h6>
 
           <form onSubmit={handleAddContact}>
-            <div className="mb-3">
-              <label htmlFor="site_contact_name" className="form-label">
-                Name
-              </label>
-              <input
-                type="text"
-                id="site_contact_name"
-                name="site_contact_name"
-                value={formData.site_contact_name}
-                onChange={handleChange}
-                required
-                className="form-control"
-              />
-            </div>
-            <div className="mb-3">
-              <label htmlFor="site_contact_email" className="form-label">
-                Email
-              </label>
-              <input
-                type="email"
-                id="site_contact_email"
-                name="site_contact_email"
-                value={formData.site_contact_email}
-                onChange={handleChange}
-                required
-                className="form-control"
-              />
-            </div>
-            <div className="mb-4">
-              <label htmlFor="site_contact_number" className="form-label">
-                Contact Number
-              </label>
-              <input
-                type="text"
-                id="site_contact_number"
-                name="site_contact_number"
-                value={formData.site_contact_number}
-                onChange={handleChange}
-                required
-                className="form-control"
-              />
-            </div>
+           <div className="mb-3">
+  <label htmlFor="site_contact_name" className="form-label">Name</label>
+  <input
+    type="text"
+    id="site_contact_name"
+    name="site_contact_name"
+    value={formData.site_contact_name}
+    onChange={handleChange}
+    className={`form-control ${errors.site_contact_name ? 'is-invalid' : ''}`}
+  />
+  {errors.site_contact_name && <div className="invalid-feedback">{errors.site_contact_name}</div>}
+</div>
+
+<div className="mb-3">
+  <label htmlFor="site_contact_email" className="form-label">Email</label>
+  <input
+    type="email"
+    id="site_contact_email"
+    name="site_contact_email"
+    value={formData.site_contact_email}
+    onChange={handleChange}
+    className={`form-control ${errors.site_contact_email ? 'is-invalid' : ''}`}
+  />
+  {errors.site_contact_email && <div className="invalid-feedback">{errors.site_contact_email}</div>}
+</div>
+
+<div className="mb-4">
+  <label htmlFor="site_contact_number" className="form-label">Contact Number</label>
+  <input
+    type="text"
+    id="site_contact_number"
+    name="site_contact_number"
+    value={formData.site_contact_number}
+    onChange={handleChange}
+    className={`form-control ${errors.site_contact_number ? 'is-invalid' : ''}`}
+  />
+  {errors.site_contact_number && <div className="invalid-feedback">{errors.site_contact_number}</div>}
+</div>
+
+{errors.form && <div className="alert alert-danger">{errors.form}</div>}
+
             <MDBBtn type="submit" color="primary" className="w-100">
               Add Contact
             </MDBBtn>
@@ -218,33 +268,50 @@ const SiteContactList = () => {
                       )}
                     </td>
                     <td className="d-flex gap-2">
-                      {editingId === contact.id ? (
+                        {editingId === contact.id ? (
+                          <>
+                            <MDBBtn
+                              size="sm"
+                              color="success"
+                              onClick={() => handleSaveEdit(contact.id)}
+                            >
+                              Save
+                            </MDBBtn>
+                            <MDBBtn
+                              size="sm"
+                              color="secondary"
+                              onClick={() => {
+                                setEditingId(null);
+                                setEditData({
+                                  site_contact_name: '',
+                                  site_contact_email: '',
+                                  site_contact_number: '',
+                                });
+                                setErrors({});
+                              }}
+                            >
+                              Cancel
+                            </MDBBtn>
+                          </>
+                        ) : (
+                          <MDBBtn
+                            size="sm"
+                            color="warning"
+                            onClick={() => handleEditClick(contact)}
+                            className="text-white"
+                          >
+                            <i className="fas fa-pen"></i>
+                          </MDBBtn>
+                        )}
                         <MDBBtn
                           size="sm"
-                          color="success"
-                          onClick={() => handleSaveEdit(contact.id)}
+                          color="danger"
+                          onClick={() => handleDeleteContact(contact.id)}
                         >
-                          Save
+                          <i className="fas fa-trash"></i>
                         </MDBBtn>
-                      ) : (
-                        <MDBBtn
-                          size="sm"
-                          color="warning"
-                          onClick={() => handleEditClick(contact)}
-                          className="text-white"
-                        >
-                          <i className="fas fa-pen"></i>
+                      </td>
 
-                        </MDBBtn>
-                      )}
-                      <MDBBtn
-                        size="sm"
-                        color="danger"
-                        onClick={() => handleDeleteContact(contact.id)}
-                      >
-                        <i className="fas fa-trash"></i>
-                      </MDBBtn>
-                    </td>
                   </tr>
                 ))}
               </MDBTableBody>

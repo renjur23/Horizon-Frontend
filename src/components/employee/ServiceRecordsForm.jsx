@@ -1,24 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import axiosInstance from '../../api/axiosInstance';
-import { Pencil, Trash } from 'lucide-react';
-import { MDBIcon } from 'mdb-react-ui-kit';
+import React, { useEffect, useState } from "react";
+import axiosInstance from "../../api/axiosInstance";
 
 const ServiceRecordsForm = ({ token }) => {
   const [formData, setFormData] = useState({
-    service_token_number: '',
-    inverter_id: '',
-    date_of_service: '',
-    problem: '',
-    repair_done: '',
-    status: '',
-    distance_travelled: '',
-    hours_spent_on_travel: '',
-    warranty_claim: '',
-    hours_spent_on_site: '',
-    base: '',
-    service_location: '',
+    service_token_number: "",
+    inverter_id: "",
+    date_of_service: "",
+    problem: "",
+    repair_done: "",
+    status: "",
+    distance_travelled: "",
+    hours_spent_on_travel: "",
+    warranty_claim: "",
+    hours_spent_on_site: "",
+    base: "",
+    service_location: "",
   });
 
+  const [formErrors, setFormErrors] = useState({});
   const [inverters, setInverters] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [records, setRecords] = useState([]);
@@ -27,111 +26,95 @@ const ServiceRecordsForm = ({ token }) => {
   const [count, setCount] = useState(0);
   const pageSize = 20;
 
-  // const handleDelete = (id) => {
-  //   // Optionally, confirm with the user:
-  //   if (window.confirm('Are you sure you want to delete this record?')) {
-  //     setRecords((prevRecords) =>
-  //       prevRecords.filter((record) => record.id !== id)
-  //     );
-  //   }
-  // };
-
-  const handleDelete = async (id) => {
-    const confirmDelete = window.confirm(
-      'Are you sure you want to delete this service record?'
-    );
-    if (!confirmDelete) return;
-
-    try {
-      await axiosInstance.delete(`/service-records/${id}/`);
-      alert('Service record deleted successfully.');
-      // Refresh the records list - replace with your actual fetch function
-      fetchRecords(); // or fetchServiceRecords() or whatever your fetch function is called
-    } catch (error) {
-      console.error('Delete failed:', error);
-      alert('Delete failed.');
-    }
+  // ✅ Regex rules
+  const validationRules = {
+    service_token_number: { regex: /^\d+$/, example: "Numeric only (e.g., 12345)" },
+    problem: { regex: /^[A-Za-z0-9\s]+$/, example: "Alphanumeric only" },
+    repair_done: { regex: /^[A-Za-z\s]+$/, example: "Letters and spaces only" },
+    distance_travelled: { regex: /^\d+$/, example: "Numeric only (e.g., 100)" },
+    hours_spent_on_travel: { regex: /^\d+$/, example: "Numeric only (e.g., 5)" },
+    warranty_claim: { regex: /^[A-Za-z0-9\s]+$/, example: "Alphanumeric (e.g., Yes123)" },
+    hours_spent_on_site: { regex: /^\d+$/, example: "Numeric only (e.g., 8)" },
+    base: { regex: /^[A-Za-z0-9\s]+$/, example: "Alphanumeric only" },
+    service_location: { regex: /^[A-Za-z0-9\s]+$/, example: "Alphanumeric only" },
   };
 
-  const naturalSortToken = (a, b) =>
-    (a.service_token_number || '').localeCompare(
-      b.service_token_number || '',
-      undefined,
-      { numeric: true, sensitivity: 'base' }
-    );
+  const validateField = (name, value) => {
+    if (validationRules[name]) {
+      const { regex, example } = validationRules[name];
+      if (value && !regex.test(value)) {
+        return `Example: ${example}`;
+      }
+    }
+    return "";
+  };
 
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    const error = validateField(name, value);
+    setFormErrors((prev) => ({ ...prev, [name]: error }));
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    Object.keys(validationRules).forEach((field) => {
+      const error = validateField(field, formData[field]);
+      if (error) newErrors[field] = error;
+    });
+    setFormErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Fetch inverters + statuses + records
   useEffect(() => {
-    axiosInstance
-      .get('inverters/', { headers: { Authorization: `Bearer ${token}` } })
+    axiosInstance.get("inverters/", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => setInverters(res.data.results || []));
-    axiosInstance
-      .get('service-statuses/', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+    axiosInstance.get("service-statuses/", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => setStatuses(res.data.results || []));
     fetchRecords(currentPage);
   }, [token, currentPage]);
 
-  // const fetchRecords = (page) => {
-  //   axiosInstance
-  //     .get(`service-records/?page=${page}`, {
-  //       headers: { Authorization: `Bearer ${token}` },
-  //     })
-  //     .then((res) => {
-  //       setRecords(res.data.results || []);
-  //       setCount(res.data.count || 0);
-  //     });
-  // };
-
   const fetchRecords = (page) => {
     axiosInstance
-      .get(`service-records/?page=${page}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      .get(`service-records/?page=${page}`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => {
-        const sortedResults = [...(res.data.results || [])].sort(
-          naturalSortToken
-        );
-        setRecords(sortedResults);
+        setRecords(res.data.results || []);
         setCount(res.data.count || 0);
       });
   };
 
-  const handleChange = (e) => {
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (!validateForm()) return; // ❌ Block submit if invalid
+
     const request = editingId
-      ? axiosInstance.put(`service-records/${editingId}/`, formData, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-      : axiosInstance.post('service-records/', formData, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+      ? axiosInstance.put(`service-records/${editingId}/`, formData, { headers: { Authorization: `Bearer ${token}` } })
+      : axiosInstance.post("service-records/", formData, { headers: { Authorization: `Bearer ${token}` } });
 
     request
       .then(() => {
-        alert('Service record saved successfully');
+        alert("✅ Service record saved successfully");
         setFormData({
-          service_token_number: '',
-          inverter_id: '',
-          date_of_service: '',
-          problem: '',
-          repair_done: '',
-          status: '',
-          distance_travelled: '',
-          hours_spent_on_travel: '',
-          warranty_claim: '',
-          hours_spent_on_site: '',
-          base: '',
-          service_location: '',
+          service_token_number: "",
+          inverter_id: "",
+          date_of_service: "",
+          problem: "",
+          repair_done: "",
+          status: "",
+          distance_travelled: "",
+          hours_spent_on_travel: "",
+          warranty_claim: "",
+          hours_spent_on_site: "",
+          base: "",
+          service_location: "",
         });
         setEditingId(null);
+        setFormErrors({});
         fetchRecords(currentPage);
       })
-      .catch((err) => console.error('Error:', err));
+      .catch((err) => console.error("Error:", err.response?.data || err.message));
   };
 
   const handleEdit = (record) => {
@@ -139,7 +122,7 @@ const ServiceRecordsForm = ({ token }) => {
       ...record,
       inverter_id: record.inverter_id,
       status: record.status,
-      date_of_service: record.date_of_service ? record.date_of_service.split('T')[0] : '',
+      date_of_service: record.date_of_service ? record.date_of_service.split("T")[0] : "",
     });
     setEditingId(record.id);
   };
@@ -152,20 +135,19 @@ const ServiceRecordsForm = ({ token }) => {
         <table className="table table-borderless">
           <tbody>
             <tr>
-              <td>
-                <label>Service Token Number</label>
-              </td>
+              <td><label>Service Token Number</label></td>
               <td>
                 <input
                   name="service_token_number"
                   value={formData.service_token_number}
                   onChange={handleChange}
-                  className="form-control"
+                  className={`form-control ${formErrors.service_token_number ? "is-invalid" : ""}`}
                 />
+                {formErrors.service_token_number && (
+                  <div className="invalid-feedback">{formErrors.service_token_number}</div>
+                )}
               </td>
-              <td>
-                <label>Inverter</label>
-              </td>
+              <td><label>Inverter</label></td>
               <td>
                 <select
                   name="inverter_id"
@@ -175,44 +157,24 @@ const ServiceRecordsForm = ({ token }) => {
                 >
                   <option value="">-- Select Inverter --</option>
                   {inverters.map((inv) => (
-                    <option key={inv.id} value={inv.id}>
-                      {inv.unit_id}
-                    </option>
+                    <option key={inv.id} value={inv.id}>{inv.unit_id}</option>
                   ))}
                 </select>
               </td>
             </tr>
+
             <tr>
+              <td><label>Date of Service</label></td>
               <td>
-                <label>Date of Service</label>
+                <input
+                  type="date"
+                  name="date_of_service"
+                  value={formData.date_of_service}
+                  onChange={handleChange}
+                  className="form-control"
+                />
               </td>
-              <td>
-                <div className="position-relative">
-                  <input
-                    type="date"
-                    id="date_of_service"
-                    name="date_of_service"
-                    value={formData.date_of_service}
-                    onChange={(e) => {
-                      handleChange(e);
-                     
-                    }}
-                    className="form-control pe-5"
-                  />
-                  <span
-                    onClick={() =>
-                      document.getElementById('date_of_service')?.showPicker?.()
-                    }
-                    className="position-absolute top-50 end-0 translate-middle-y me-3"
-                    style={{ cursor: 'pointer', color: '#999' }}
-                  >
-                    📅
-                  </span>
-                </div>
-              </td>
-              <td>
-                <label>Status</label>
-              </td>
+              <td><label>Status</label></td>
               <td>
                 <select
                   name="status"
@@ -222,111 +184,117 @@ const ServiceRecordsForm = ({ token }) => {
                 >
                   <option value="">-- Select Status --</option>
                   {statuses.map((stat) => (
-                    <option key={stat.id} value={stat.id}>
-                      {stat.service_status_name}
-                    </option>
+                    <option key={stat.id} value={stat.id}>{stat.service_status_name}</option>
                   ))}
                 </select>
               </td>
             </tr>
+
             <tr>
-              <td>
-                <label>Active Issue</label>
-              </td>
+              <td><label>Active Issue</label></td>
               <td>
                 <textarea
                   name="problem"
                   value={formData.problem}
                   onChange={handleChange}
-                  className="form-control"
+                  className={`form-control ${formErrors.problem ? "is-invalid" : ""}`}
                 />
+                {formErrors.problem && (
+                  <div className="invalid-feedback">{formErrors.problem}</div>
+                )}
               </td>
-              <td>
-                <label>Rectified Issue</label>
-              </td>
+              <td><label>Rectified Issue</label></td>
               <td>
                 <input
                   name="repair_done"
                   value={formData.repair_done}
                   onChange={handleChange}
-                  className="form-control"
+                  className={`form-control ${formErrors.repair_done ? "is-invalid" : ""}`}
                 />
+                {formErrors.repair_done && (
+                  <div className="invalid-feedback">{formErrors.repair_done}</div>
+                )}
               </td>
             </tr>
+
             <tr>
-              <td>
-                <label>Distance Travelled</label>
-              </td>
+              <td><label>Distance Travelled</label></td>
               <td>
                 <input
                   name="distance_travelled"
                   value={formData.distance_travelled}
                   onChange={handleChange}
-                  className="form-control"
+                  className={`form-control ${formErrors.distance_travelled ? "is-invalid" : ""}`}
                 />
+                {formErrors.distance_travelled && (
+                  <div className="invalid-feedback">{formErrors.distance_travelled}</div>
+                )}
               </td>
-              <td>
-                <label>Hours on Travel</label>
-              </td>
+              <td><label>Hours on Travel</label></td>
               <td>
                 <input
                   name="hours_spent_on_travel"
                   value={formData.hours_spent_on_travel}
                   onChange={handleChange}
-                  className="form-control"
+                  className={`form-control ${formErrors.hours_spent_on_travel ? "is-invalid" : ""}`}
                 />
+                {formErrors.hours_spent_on_travel && (
+                  <div className="invalid-feedback">{formErrors.hours_spent_on_travel}</div>
+                )}
               </td>
             </tr>
+
             <tr>
+              <td><label>Warranty Claim</label></td>
               <td>
-                <label>Warranty Claim</label>
-              </td>
-              <td>
-                <select
+                <input
                   name="warranty_claim"
                   value={formData.warranty_claim}
                   onChange={handleChange}
-                  className="form-select"
-                >
-                  <option value="">-- Select --</option>
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
-                </select>
+                  className={`form-control ${formErrors.warranty_claim ? "is-invalid" : ""}`}
+                />
+                {formErrors.warranty_claim && (
+                  <div className="invalid-feedback">{formErrors.warranty_claim}</div>
+                )}
               </td>
-              <td>
-                <label>Hours on Site</label>
-              </td>
+              <td><label>Hours on Site</label></td>
               <td>
                 <input
                   name="hours_spent_on_site"
                   value={formData.hours_spent_on_site}
                   onChange={handleChange}
-                  className="form-control"
+                  className={`form-control ${formErrors.hours_spent_on_site ? "is-invalid" : ""}`}
                 />
+                {formErrors.hours_spent_on_site && (
+                  <div className="invalid-feedback">{formErrors.hours_spent_on_site}</div>
+                )}
               </td>
             </tr>
+
             <tr>
-              <td>
-                <label>Base</label>
-              </td>
+              <td><label>Base</label></td>
               <td>
                 <input
                   name="base"
                   value={formData.base}
                   onChange={handleChange}
-                  className="form-control"
+                  className={`form-control ${formErrors.base ? "is-invalid" : ""}`}
                 />
+                {formErrors.base && (
+                  <div className="invalid-feedback">{formErrors.base}</div>
+                )}
               </td>
-              <td>
-                <label>Service Location</label>
-              </td>
+              <td><label>Service Location</label></td>
               <td>
                 <input
                   name="service_location"
                   value={formData.service_location}
                   onChange={handleChange}
-                  className="form-control"
+                  className={`form-control ${formErrors.service_location ? "is-invalid" : ""}`}
                 />
+                {formErrors.service_location && (
+                  <div className="invalid-feedback">{formErrors.service_location}</div>
+                )}
               </td>
             </tr>
           </tbody>
@@ -334,7 +302,7 @@ const ServiceRecordsForm = ({ token }) => {
 
         <div className="text-end mt-3">
           <button type="submit" className="btn btn-primary">
-            {editingId ? 'Update' : 'Add'} Service Record
+            {editingId ? "Update" : "Add"} Service Record
           </button>
         </div>
       </form>

@@ -14,19 +14,81 @@ const GeneratorForm = ({ onGeneratorAdded = null }) => {
     fuel_consumption: "",
   });
 
+  const [errors, setErrors] = useState({});
   const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
+
+  // regex patterns
+  const generatorNoRegex = /^[A-Z]{2,5}-\d{2}$/; // e.g., ABM-01
+  const numberRegex = /^[0-9]+$/; // only digits
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+
     setFormData((prevData) => ({
       ...prevData,
       [name]: value,
     }));
+
+    validateField(name, value); // validate as user types
+  };
+
+  const validateField = (name, value) => {
+    let error = "";
+
+    if (name === "generator_no" && value) {
+      if (!generatorNoRegex.test(value)) {
+        error = "Format must be like ABM-01 (uppercase letters + hyphen + 2 digits)";
+      }
+    }
+
+    if (name === "generator_size" && value) {
+      if (!numberRegex.test(value) || parseInt(value, 10) <= 0) {
+        error = "Size must be a positive number";
+      }
+    }
+
+    if (name === "fuel_consumption" && value) {
+      if (!numberRegex.test(value) || parseInt(value, 10) <= 0) {
+        error = "Fuel consumption must be a positive number";
+      }
+    }
+
+    setErrors((prev) => ({
+      ...prev,
+      [name]: error,
+    }));
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    const { generator_no, generator_size, fuel_consumption } = formData;
+
+    if (!generatorNoRegex.test(generator_no)) {
+      newErrors.generator_no = "Format must be like ABM-01";
+    }
+
+    if (!numberRegex.test(generator_size) || parseInt(generator_size, 10) <= 0) {
+      newErrors.generator_size = "Size must be a positive number";
+    }
+
+    if (!numberRegex.test(fuel_consumption) || parseInt(fuel_consumption, 10) <= 0) {
+      newErrors.fuel_consumption = "Fuel consumption must be a positive number";
+    }
+
+    // if generator_no is entered => size and fuel_consumption required
+    if (generator_no && (!generator_size || !fuel_consumption)) {
+      newErrors.generator_size = "Required if generator no is given";
+      newErrors.fuel_consumption = "Required if generator no is given";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!validateForm()) return;
 
     try {
       const response = await axiosInstance.post("/generators/", formData);
@@ -41,16 +103,12 @@ const GeneratorForm = ({ onGeneratorAdded = null }) => {
         fuel_consumption: "",
       });
 
+      setErrors({});
       setSuccessMessage("✅ Generator details added successfully!");
-      setErrorMessage("");
 
-      setTimeout(() => {
-        setSuccessMessage("");
-      }, 3000);
+      setTimeout(() => setSuccessMessage(""), 3000);
     } catch (error) {
       console.error("Error submitting generator form:", error.response?.data || error.message);
-      setErrorMessage("❌ Failed to add generator details.");
-      setSuccessMessage("");
     }
   };
 
@@ -62,9 +120,9 @@ const GeneratorForm = ({ onGeneratorAdded = null }) => {
         </MDBCardTitle>
 
         {successMessage && <div className="alert alert-success">{successMessage}</div>}
-        {errorMessage && <div className="alert alert-danger">{errorMessage}</div>}
 
         <form onSubmit={handleSubmit}>
+          {/* Generator No */}
           <div className="mb-3">
             <label htmlFor="generator_no" className="form-label">Generator No</label>
             <input
@@ -74,10 +132,15 @@ const GeneratorForm = ({ onGeneratorAdded = null }) => {
               value={formData.generator_no}
               onChange={handleChange}
               required
-              className="form-control"
+              className={`form-control ${errors.generator_no ? "is-invalid" : ""}`}
+              placeholder="e.g., ABM-01"
             />
+            {errors.generator_no && (
+              <div className="invalid-feedback">{errors.generator_no}</div>
+            )}
           </div>
 
+          {/* Generator Size */}
           <div className="mb-3">
             <label htmlFor="generator_size" className="form-label">Generator Size</label>
             <input
@@ -87,10 +150,15 @@ const GeneratorForm = ({ onGeneratorAdded = null }) => {
               value={formData.generator_size}
               onChange={handleChange}
               required
-              className="form-control"
+              className={`form-control ${errors.generator_size ? "is-invalid" : ""}`}
+              placeholder="Enter size (numbers only)"
             />
+            {errors.generator_size && (
+              <div className="invalid-feedback">{errors.generator_size}</div>
+            )}
           </div>
 
+          {/* Fuel Consumption */}
           <div className="mb-4">
             <label htmlFor="fuel_consumption" className="form-label">Fuel Consumption</label>
             <input
@@ -100,8 +168,12 @@ const GeneratorForm = ({ onGeneratorAdded = null }) => {
               value={formData.fuel_consumption}
               onChange={handleChange}
               required
-              className="form-control"
+              className={`form-control ${errors.fuel_consumption ? "is-invalid" : ""}`}
+              placeholder="Enter fuel consumption (numbers only)"
             />
+            {errors.fuel_consumption && (
+              <div className="invalid-feedback">{errors.fuel_consumption}</div>
+            )}
           </div>
 
           <MDBBtn type="submit" color="primary" className="w-100">

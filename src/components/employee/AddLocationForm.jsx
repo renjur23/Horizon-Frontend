@@ -6,19 +6,32 @@ const AddLocationForm = () => {
   const [locationName, setLocationName] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState("");
+  const [validationError, setValidationError] = useState("");
+
+  // Regex rule: alphanumeric + spaces only
+  const locationRegex = /^[A-Za-z0-9 ]+$/;
 
   const handleAddLocation = async (e) => {
     e.preventDefault();
     setSuccessMessage("");
     setError("");
+    setValidationError("");
+
+    // frontend regex validation
+    if (!locationRegex.test(locationName.trim())) {
+      setValidationError(
+        "Example: 'New York 123' (alphanumeric and spaces only)"
+      );
+      return;
+    }
 
     try {
       const token = localStorage.getItem("access_token");
 
-      const response = await axiosInstance.post(
+      await axiosInstance.post(
         "locations/",
         {
-          location_name: locationName,
+          location_name: locationName.trim(),
         },
         {
           headers: {
@@ -30,13 +43,23 @@ const AddLocationForm = () => {
       setSuccessMessage("✅ Location added successfully!");
       setLocationName("");
     } catch (err) {
-      setError("❌ Failed to add location. Please try again.");
-      console.error(err);
+      console.error(err.response?.data || err.message);
+
+      // If backend returned validation errors
+      if (err.response?.data?.location_name) {
+        setValidationError(err.response.data.location_name[0]);
+      } else {
+        setError("❌ Failed to add location. Please try again.");
+      }
     }
   };
 
   return (
-    <form onSubmit={handleAddLocation} className="text-start mx-auto" style={{ maxWidth: "400px" }}>
+    <form
+      onSubmit={handleAddLocation}
+      className="text-start mx-auto"
+      style={{ maxWidth: "400px" }}
+    >
       {successMessage && <p className="text-success">{successMessage}</p>}
       {error && <p className="text-danger">{error}</p>}
 
@@ -44,11 +67,14 @@ const AddLocationForm = () => {
         <label className="form-label fw-semibold">Location Name</label>
         <input
           type="text"
-          className="form-control"
+          className={`form-control ${validationError ? "is-invalid" : ""}`}
           value={locationName}
           onChange={(e) => setLocationName(e.target.value)}
           required
         />
+        {validationError && (
+          <div className="invalid-feedback">{validationError}</div>
+        )}
       </div>
 
       <button type="submit" className="btn btn-primary">

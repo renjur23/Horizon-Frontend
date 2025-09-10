@@ -17,7 +17,7 @@ const SubmittedChecklistList = () => {
   const [prevPage, setPrevPage] = useState(null);
   const [count, setCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedChecklist, setSelectedChecklist] = useState(null); // 👈 store clicked checklist
+  const [selectedChecklist, setSelectedChecklist] = useState(null);
   const pageSize = 20;
 
   const fetchChecklists = async (page = 1) => {
@@ -29,10 +29,17 @@ const SubmittedChecklistList = () => {
       setCurrentPage(Number(page));
       setCount(res.data.count || 0);
     } catch (error) {
-      console.error(
-        "Error fetching checklists:",
-        error.response?.data || error.message
-      );
+      console.error("Error fetching checklists:", error.response?.data || error.message);
+    }
+  };
+
+  // ✅ Fetch full details on click
+  const fetchChecklistDetails = async (id) => {
+    try {
+      const res = await axiosInstance.get(`/checklists/${id}/`);
+      setSelectedChecklist(res.data); // full details including items + batteries + images
+    } catch (error) {
+      console.error("Error fetching checklist details:", error.response?.data || error.message);
     }
   };
 
@@ -43,8 +50,7 @@ const SubmittedChecklistList = () => {
   const goToNextPage = () => {
     if (nextPage) {
       const nextPageNum =
-        parseInt(new URL(nextPage).searchParams.get("page")) ||
-        currentPage + 1;
+        parseInt(new URL(nextPage).searchParams.get("page")) || currentPage + 1;
       fetchChecklists(nextPageNum);
     }
   };
@@ -100,15 +106,13 @@ const SubmittedChecklistList = () => {
                 </MDBTableHead>
                 <MDBTableBody>
                   {filteredChecklists.map((chk, index) => {
-                    const serialNumber =
-                      (currentPage - 1) * pageSize + index + 1;
+                    const serialNumber = (currentPage - 1) * pageSize + index + 1;
                     return (
                       <tr key={chk.id}>
                         <td>{serialNumber}</td>
-                        {/* 👇 Clickable Unit No */}
                         <td
                           className="text-primary cursor-pointer fw-bold"
-                          onClick={() => setSelectedChecklist(chk)}
+                          onClick={() => fetchChecklistDetails(chk.id)} // ✅ full details on click
                         >
                           {chk.unit_no}
                         </td>
@@ -119,9 +123,7 @@ const SubmittedChecklistList = () => {
                         <td>
                           {chk.test_time
                             ? (() => {
-                                const [h, m] = chk.test_time
-                                  .split(":")
-                                  .map(Number);
+                                const [h, m] = chk.test_time.split(":").map(Number);
                                 return h * 60 + m + " mins";
                               })()
                             : "N/A"}
@@ -184,31 +186,23 @@ const SubmittedChecklistList = () => {
                 ))}
               </MDBTableBody>
             </MDBTable>
-{selectedChecklist.images && selectedChecklist.images.length > 0 && (
-  <div className="mt-4">
-    <h6 className="fw-semibold">🖼 Uploaded Images</h6>
-    <div className="d-flex flex-wrap gap-3">
-      {selectedChecklist.images.map((img, idx) => {
-        // Check if img is a string (URL path) or an object with file data
-        const imgUrl = typeof img === "string" ? img : img.file;
 
-        return (
-          <div key={idx} className="border rounded p-2" style={{ width: "180px" }}>
-            <img
-              src={img.image} 
-              alt={`Checklist image ${idx + 1}`}
-              className="img-fluid rounded"
-            />
-          </div>
-        );
-      })}
-    </div>
-  </div>
-)}
-
-
-
-
+            {selectedChecklist.images?.length > 0 && (
+              <div className="mt-4">
+                <h6 className="fw-semibold">🖼 Uploaded Images</h6>
+                <div className="d-flex flex-wrap gap-3">
+                  {selectedChecklist.images.map((img, idx) => (
+                    <div key={idx} className="border rounded p-2" style={{ width: "180px" }}>
+                      <img
+                        src={img.image}
+                        alt={`Checklist image ${idx + 1}`}
+                        className="img-fluid rounded"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="mt-3">
               <MDBBtn color="secondary" onClick={() => setSelectedChecklist(null)}>
@@ -226,20 +220,10 @@ const SubmittedChecklistList = () => {
           {Math.min(currentPage * pageSize, count)} of {count}
         </p>
         <div className="d-flex gap-2">
-          <MDBBtn
-            size="sm"
-            color="light"
-            disabled={!prevPage}
-            onClick={goToPrevPage}
-          >
+          <MDBBtn size="sm" color="light" disabled={!prevPage} onClick={goToPrevPage}>
             ⬅ Prev
           </MDBBtn>
-          <MDBBtn
-            size="sm"
-            color="light"
-            disabled={!nextPage}
-            onClick={goToNextPage}
-          >
+          <MDBBtn size="sm" color="light" disabled={!nextPage} onClick={goToNextPage}>
             Next ➡
           </MDBBtn>
         </div>

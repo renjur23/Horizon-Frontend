@@ -24,69 +24,88 @@ const RegisterUser = ({ userLabel = 'User' }) => {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
+
+const validateForm = () => {
+  const errors = {};
+
+  // Name validation
+  if (!formData.name.trim()) {
+    errors.name = "Name is required";
+  } else if (formData.name.length < 3) {
+    errors.name = "Name must be at least 3 characters";
+  }
+
+  // Email validation
+  if (!formData.email.trim()) {
+    errors.email = "Email is required";
+  } else if (!/^[\w.-]+@[a-zA-Z\d.-]+\.[a-zA-Z]{2,6}$/.test(formData.email)) {
+    errors.email = "Invalid email format";
+  }
+
+  // Password validation
+  const strongPasswordRegex =
+    /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
+  if (!formData.password.trim()) {
+    errors.password = "Password is required";
+  } else if (!strongPasswordRegex.test(formData.password)) {
+    errors.password =
+      "Password must be at least 8 characters, include an uppercase letter, a number, and a special character";
+  }
+
+  return errors;
+};
+
+
   const handleChange = (e) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
     setError('');
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
+  setError('');
+  setSuccessMsg('');
 
-    if (
-      !formData.name.trim() ||
-      !formData.email.trim() ||
-      !formData.password.trim()
-    ) {
-      setError('Please fill in all fields.');
-      return;
+  const errors = validateForm();
+  if (Object.keys(errors).length > 0) {
+    // Show the first error (or handle multiple)
+    setError(Object.values(errors)[0]);
+    return;
+  }
+
+  setIsSubmitting(true);
+  try {
+    await axios.post(
+      `${import.meta.env.VITE_BASE_URL}/auth/register/`,
+      formData
+    );
+    setSuccessMsg('Registration successful! Awaiting admin approval.');
+    setTimeout(() => navigate('/login'), 3000);
+  } catch (err) {
+    const errorData = err.response?.data;
+
+    if (errorData?.email?.[0]?.toLowerCase().includes('already exists')) {
+      setError('A user with this email already exists.');
+      setTimeout(() => {
+        setFormData({ name: '', email: '', password: '', user_type: 'guest' });
+        setError('');
+      }, 3000);
+    } else if (errorData?.email) {
+      setError(errorData.email[0]);
+    } else if (errorData?.password) {
+      setError(errorData.password[0]);
+    } else if (errorData?.name) {
+      setError(errorData.name[0]);
+    } else {
+      setError('Registration failed.');
     }
 
-    const strongPasswordRegex =
-      /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
-    if (!strongPasswordRegex.test(formData.password)) {
-      setError(
-        'Password must be at least 8 characters long, include an uppercase letter, a number, and a special character.'
-      );
-      return;
-    }
+    setSuccessMsg('');
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
-    setIsSubmitting(true);
-    try {
-      await axios.post(
-        `${import.meta.env.VITE_BASE_URL}/auth/register/`,
-        formData
-      );
-      setSuccessMsg('Registration successful! Awaiting admin approval.');
-      setTimeout(() => navigate('/login'), 3000);
-    } catch (err) {
-      const errorData = err.response?.data;
-
-      if (errorData?.email?.[0]?.toLowerCase().includes('already exists')) {
-        setError('A user with this email already exists.');
-        setTimeout(() => {
-          setFormData({
-            name: '',
-            email: '',
-            password: '',
-            user_type: 'guest',
-          });
-          setError('');
-        }, 3000);
-      } else if (errorData?.email) {
-        setError(errorData.email[0]);
-      } else if (errorData?.password) {
-        setError(errorData.password[0]);
-      } else if (errorData?.name) {
-        setError(errorData.name[0]);
-      } else {
-        setError('Registration failed.');
-      }
-
-      setSuccessMsg('');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   return (
     <MDBContainer className="my-5 gradient-form">

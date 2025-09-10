@@ -12,6 +12,19 @@ const LoginForm = () => {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
+const validateLoginForm = () => {
+  const { email, password } = formData;
+  if (!email.trim() || !password.trim()) {
+    return "Email and password are required.";
+  }
+  const emailRegex = /^[\w.-]+@[a-zA-Z\d.-]+\.[a-zA-Z]{2,6}$/;
+  if (!emailRegex.test(email)) {
+    return "Invalid email format.";
+  }
+  return null;
+};
+
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
@@ -19,6 +32,11 @@ const LoginForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+     const validationError = validateLoginForm();
+      if (validationError) {
+        setError(validationError);
+        return; 
+      }
     try {
       const res = await axios.post(
         `${import.meta.env.VITE_BASE_URL}/auth/login/`,
