@@ -8,35 +8,56 @@ import CustomButton from '../components/CustomButton'; // ✅ Import your custom
 
 const LoginForm = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
-const validateLoginForm = () => {
-  const { email, password } = formData;
-  if (!email.trim() || !password.trim()) {
-    return "Email and password are required.";
-  }
-  const emailRegex = /^[\w.-]+@[a-zA-Z\d.-]+\.[a-zA-Z]{2,6}$/;
-  if (!emailRegex.test(email)) {
-    return "Invalid email format.";
-  }
-  return null;
-};
+  // Inline validation rules
+  const validators = {
+    email: (value) => {
+      if (!value.trim()) return 'Email is required';
+      const emailRegex = /^[\w.-]+@[a-zA-Z\d.-]+\.[a-zA-Z]{2,6}$/;
+      if (!emailRegex.test(value)) return 'Invalid email format';
+      return '';
+    },
+    password: (value) => {
+      if (!value.trim()) return 'Password is required';
+      if (value.length < 6) return 'Password must be at least 6 characters';
+      return '';
+    },
+  };
 
-
+  // Handle field changes
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    setError('');
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    // Inline validation while typing
+    setErrors((prev) => ({ ...prev, [name]: validators[name](value) }));
+  };
+
+  // Handle blur (extra check)
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    setErrors((prev) => ({ ...prev, [name]: validators[name](value) }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-     const validationError = validateLoginForm();
-      if (validationError) {
-        setError(validationError);
-        return; 
-      }
+    setErrors({});
+
+    // Validate before submit
+    const newErrors = {};
+    Object.keys(validators).forEach((field) => {
+      const errorMsg = validators[field](formData[field]);
+      if (errorMsg) newErrors[field] = errorMsg;
+    });
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
     try {
       const res = await axios.post(
         `${import.meta.env.VITE_BASE_URL}/auth/login/`,
@@ -52,8 +73,18 @@ const validateLoginForm = () => {
       if (role === 'admin') navigate('/admin-dashboard');
       else if (role === 'employee') navigate('/employee-dashboard');
       else navigate('/guest-dashboard');
-    } catch {
-      setError('Invalid credentials. Please try again.');
+    } catch (err) {
+      const errorData = err.response?.data || {};
+      const fieldErrors = {};
+
+      if (errorData.email) fieldErrors.email = errorData.email[0];
+      if (errorData.password) fieldErrors.password = errorData.password[0];
+      if (!Object.keys(fieldErrors).length) {
+        fieldErrors.general =
+          errorData.detail || 'Invalid credentials. Please try again.';
+      }
+
+      setErrors(fieldErrors);
     }
   };
 
@@ -80,22 +111,27 @@ const validateLoginForm = () => {
 
               <form onSubmit={handleSubmit}>
                 <MDBInput
-                  wrapperClass="mb-4"
+                  wrapperClass="mb-1"
                   label="Email address"
                   type="email"
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   required
                 />
+                {errors.email && (
+                  <p className="text-danger small">{errors.email}</p>
+                )}
 
-                <div className="position-relative mb-4">
+                <div className="position-relative mb-1">
                   <MDBInput
                     label="Password"
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                     required
                   />
                   <span
@@ -106,8 +142,13 @@ const validateLoginForm = () => {
                     {showPassword ? '🙈' : '👁️'}
                   </span>
                 </div>
+                {errors.password && (
+                  <p className="text-danger small">{errors.password}</p>
+                )}
 
-                {error && <div className="text-danger mb-3">{error}</div>}
+                {errors.general && (
+                  <div className="alert alert-danger">{errors.general}</div>
+                )}
 
                 <div className="text-center pt-1 mb-5 pb-1">
                   <CustomButton
