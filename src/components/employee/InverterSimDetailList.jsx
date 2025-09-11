@@ -320,17 +320,28 @@ const InverterSimDetailList = () => {
           <MDBCardTitle className="text-secondary fs-5 mb-3">📋 SIM Details Listing</MDBCardTitle>
           <MDBTable hover bordered responsive align="middle">
             <MDBTableHead light>
-              <tr>
-                <th>SI No</th>
-                <th>Inverter</th>
-                <th>Phone Number</th>
-                <th>SIM Serial No</th>
-                <th>User No</th>
-                <th>Installation Date</th>
-                <th>Remarks</th>
-                <th>Actions</th>
-              </tr>
-            </MDBTableHead>
+                <tr>
+                  <th>SI No</th>
+                  <th onClick={() => sortData('inverter_id')} style={{ cursor: 'pointer' }}>
+                    Inverter {sortConfig.key === 'inverter_id' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => sortData('phone_number')} style={{ cursor: 'pointer' }}>
+                    Phone Number {sortConfig.key === 'phone_number' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => sortData('serial_no')} style={{ cursor: 'pointer' }}>
+                    SIM Serial No {sortConfig.key === 'serial_no' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => sortData('user_no')} style={{ cursor: 'pointer' }}>
+                    User No {sortConfig.key === 'user_no' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => sortData('installation_date')} style={{ cursor: 'pointer' }}>
+                    Installation Date {sortConfig.key === 'installation_date' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : ''}
+                  </th>
+                  <th>Remarks</th>
+                  <th>Actions</th>
+                </tr>
+              </MDBTableHead>
+
             <MDBTableBody>
               {simDetails.length > 0 ? (
                 simDetails.map((sim, index) => (

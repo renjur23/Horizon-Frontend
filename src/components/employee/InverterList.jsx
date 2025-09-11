@@ -86,6 +86,31 @@ const InverterList = () => {
     return '';
   };
 
+ const sortedInverters = [...inverters].sort((a, b) => {
+  if (!sortConfig.key) return 0;
+
+  let valA, valB;
+
+  if (sortConfig.key === 'status') {
+    valA = a.inverter_status?.inverter_status_name || '';
+    valB = b.inverter_status?.inverter_status_name || '';
+  } else {
+    valA = a[sortConfig.key] || '';
+    valB = b[sortConfig.key] || '';
+  }
+
+  // Handle dates/numbers consistently
+  if (!isNaN(Date.parse(valA)) && !isNaN(Date.parse(valB))) {
+    valA = new Date(valA);
+    valB = new Date(valB);
+  }
+
+  if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+  if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+  return 0;
+});
+
+
   const handleEdit = (inverter) => {
     setEditingId(inverter.id);
     setEditData({
@@ -202,20 +227,31 @@ const InverterList = () => {
           ) : (
             <div className="table-responsive">
               <MDBTable hover bordered align="middle">
-                <MDBTableHead light>
+               <MDBTableHead light>
                   <tr>
                     <th>Si. No</th>
-                    <th onClick={() => handleSort('unit_id')} style={{ cursor: 'pointer' }}>Unit ID</th>
-                    <th onClick={() => handleSort('model')} style={{ cursor: 'pointer' }}>Model</th>
-                    <th onClick={() => handleSort('given_name')} style={{ cursor: 'pointer' }}>Given Name</th>
-                    <th onClick={() => handleSort('serial_no')} style={{ cursor: 'pointer' }}>Serial No</th>
-                    <th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}>Status</th>
+                    <th onClick={() => handleSort('unit_id')} style={{ cursor: 'pointer' }}>
+                      Unit ID {sortConfig.key === 'unit_id' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onClick={() => handleSort('model')} style={{ cursor: 'pointer' }}>
+                      Model {sortConfig.key === 'model' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onClick={() => handleSort('given_name')} style={{ cursor: 'pointer' }}>
+                      Given Name {sortConfig.key === 'given_name' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onClick={() => handleSort('serial_no')} style={{ cursor: 'pointer' }}>
+                      Serial No {sortConfig.key === 'serial_no' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}>
+                      Status {sortConfig.key === 'status' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                    </th>
                     <th>Remarks</th>
                     <th>Actions</th>
                   </tr>
                 </MDBTableHead>
+
                 <MDBTableBody>
-                  {inverters.map((inv, index) => {
+                  {sortedInverters.map((inv, index) => {
                     const serialNumber = (currentPage - 1) * pageSize + index + 1;
                     return (
                       <tr key={inv.id}>

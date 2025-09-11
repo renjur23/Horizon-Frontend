@@ -21,6 +21,8 @@ const SiteContactList = () => {
   const [count, setCount] = useState(0);
   const [editingId, setEditingId] = useState(null);
   const [errors, setErrors] = useState({});
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
 
   const [editData, setEditData] = useState({
     site_contact_name: '',
@@ -74,6 +76,14 @@ const SiteContactList = () => {
 
   return newErrors;
 };
+const handleSort = (key) => {
+  setSortConfig((prev) => {
+    if (prev.key === key) {
+      return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+    }
+    return { key, direction: 'asc' };
+  });
+};
 
 
   const handleAddContact = async (e) => {
@@ -101,6 +111,21 @@ const SiteContactList = () => {
     alert("❌ Failed to add site contact.");
   }
 };
+
+const sortedContacts = [...contacts].sort((a, b) => {
+  if (!sortConfig.key) return 0;
+
+  let valA = a[sortConfig.key] || '';
+  let valB = b[sortConfig.key] || '';
+
+  valA = valA.toString().toLowerCase();
+  valB = valB.toString().toLowerCase();
+
+  if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+  if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+  return 0;
+});
+
 
   const handleEditClick = (contact) => {
     setEditingId(contact.id);
@@ -220,14 +245,21 @@ const SiteContactList = () => {
               <MDBTableHead>
                 <tr>
                   <th>SI</th>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Number</th>
+                  <th onClick={() => handleSort('site_contact_name')} style={{ cursor: 'pointer' }}>
+                    Name {sortConfig.key === 'site_contact_name' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => handleSort('site_contact_email')} style={{ cursor: 'pointer' }}>
+                    Email {sortConfig.key === 'site_contact_email' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => handleSort('site_contact_number')} style={{ cursor: 'pointer' }}>
+                    Number {sortConfig.key === 'site_contact_number' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                  </th>
                   <th>Actions</th>
                 </tr>
               </MDBTableHead>
+
               <MDBTableBody>
-                {contacts.map((contact, index) => (
+                {sortedContacts.map((contact, index) => (
                   <tr key={contact.id}>
                     <td>{(currentPage - 1) * 10 + index + 1}</td>
                     <td>

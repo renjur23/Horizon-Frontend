@@ -224,15 +224,6 @@ const handleSave = async () => {
     }
   };
 
-  // const filteredOrders = orders.filter(
-  //   (order) =>
-  //     order.po_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-  //     order.contract_no.toLowerCase().includes(searchQuery.toLowerCase())||
-  //     (order.inverter_name || '').toLowerCase().includes(searchQuery.toLowerCase())||
-  //      (order.generator_no || '').toLowerCase().includes(searchQuery.toLowerCase()) ||   
-  //     (order.location_name || '').toLowerCase().includes(searchQuery.toLowerCase()) 
-  // );
-
 
  
   return (
@@ -404,15 +395,26 @@ const handleSave = async () => {
                               className="form-control"
                             />
                           </td>
-                          <td className="text-center">
-                            <MDBBtn
-                              size="sm"
-                              color="success"
-                              onClick={handleSave}
-                            >
-                              Save
-                            </MDBBtn>
-                          </td>
+                          <td className="text-center d-flex gap-2">
+                              <MDBBtn
+                                size="sm"
+                                color="success"
+                                onClick={handleSave}
+                              >
+                                Save
+                              </MDBBtn>
+                              <MDBBtn
+                                size="sm"
+                                color="secondary"
+                                onClick={() => {
+                                  setEditingId(null);
+                                  setEditData({});
+                                }}
+                              >
+                                Cancel
+                              </MDBBtn>
+                            </td>
+
                         </>
                       ) : (
                         <>

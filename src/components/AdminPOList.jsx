@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import axiosInstance from '../api/axiosInstance';
-import { Pencil } from 'lucide-react';
 import {
   MDBCard,
   MDBCardBody,
@@ -9,13 +8,13 @@ import {
   MDBTable,
   MDBTableHead,
   MDBTableBody,
-  MDBIcon
 } from 'mdb-react-ui-kit';
 
 const AdminPOList = () => {
   const [orders, setOrders] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
+  const [errors, setErrors] = useState({}); // 🔹 inline field errors
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [nextPage, setNextPage] = useState(null);
@@ -29,18 +28,21 @@ const AdminPOList = () => {
   const [siteContacts, setSiteContacts] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
+  // 🔹 Regex patterns
+  const patterns = {
+    po_number: /^[A-Za-z0-9/\- ]+$/,
+    contract_no: /^[A-Za-z0-9\-]+$/,
+    remarks: /^[A-Za-z0-9\s.,;:!@#&()\-_/]*$/,
+  };
+
   useEffect(() => {
     fetchOrders();
     fetchDropdownData();
   }, []);
 
-
-
-
   const fetchOrders = async (page = 1) => {
     try {
       const response = await axiosInstance.get(`/orders/?page=${page}`);
-      console.log(response)
       setOrders(response.data.results || []);
       setNextPage(response.data.next);
       setPrevPage(response.data.previous);
@@ -72,41 +74,81 @@ const AdminPOList = () => {
     setEditingId(order.id);
     setEditData({
       ...order,
-      location: order.location ,
+      location: order.location,
       inverter: order.inverter,
       generator: order.generator,
       site_contact: order.site_contact,
-      start_date:order.start_date,
-     end_date:order.end_date,
+      start_date: order.start_date,
+      end_date: order.end_date,
     });
+    setErrors({});
+  };
+
+  // 🔹 Validation function
+  const validateField = (name, value) => {
+    let error = '';
+
+    switch (name) {
+      case 'po_number':
+        if (!patterns.po_number.test(value)) {
+          error =
+            'PO Number can only contain letters, digits, slashes (/), dashes (-), and spaces.';
+        }
+        break;
+      case 'contract_no':
+        if (!patterns.contract_no.test(value)) {
+          error =
+            'Contract Number can only contain letters, digits, and dashes (-).';
+        }
+        break;
+      case 'remarks':
+        if (value && !patterns.remarks.test(value)) {
+          error =
+            'Remarks may only contain letters, numbers, spaces, and basic punctuation.';
+        }
+        break;
+      case 'end_date':
+        if (editData.start_date && value && new Date(value) < new Date(editData.start_date)) {
+          error = 'End date must be after Start date.';
+        }
+        break;
+      default:
+        break;
+    }
+
+    setErrors((prev) => ({ ...prev, [name]: error }));
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setEditData((prev) => ({ ...prev, [name]: value }));
+    validateField(name, value);
   };
 
   const handleSave = async () => {
+    // Prevent save if errors exist
+    if (Object.values(errors).some((err) => err)) {
+      alert('Please fix validation errors before saving.');
+      return;
+    }
+
     try {
       const payload = {
         po_number: editData.po_number,
         contract_no: editData.contract_no,
         remarks: editData.remarks,
-        start_date: editData.start_date ||null,
+        start_date: editData.start_date || null,
         end_date: editData.end_date || null,
         location_id: editData.location,
         inverter: editData.inverter,
         generator_no: editData.generator,
         site_contact_id: editData.site_contact,
       };
-     const response = await axiosInstance.patch(`/orders/${editingId}/`, payload);
+      const response = await axiosInstance.patch(`/orders/${editingId}/`, payload);
 
       setOrders((prev) =>
-        prev.map((order) =>
-          order.id === editingId ? response.data : order
-        )
+        prev.map((order) => (order.id === editingId ? response.data : order))
       );
-
 
       alert('Order updated successfully');
       setEditingId(null);
@@ -129,47 +171,45 @@ const AdminPOList = () => {
     }
   };
 
- const goToNextPage = () => {
-  const totalPages = Math.ceil(count / pageSize); 
-  if (currentPage < totalPages) {
-    fetchOrders(currentPage + 1);
-  }
-};
+  const goToNextPage = () => {
+    const totalPages = Math.ceil(count / pageSize);
+    if (currentPage < totalPages) {
+      fetchOrders(currentPage + 1);
+    }
+  };
 
-const goToPrevPage = () => {
-  if (currentPage > 1) {
-    fetchOrders(currentPage - 1);
-  }
-};
-
+  const goToPrevPage = () => {
+    if (currentPage > 1) {
+      fetchOrders(currentPage - 1);
+    }
+  };
 
   const filteredOrders = orders.filter((order) => {
     const query = searchQuery.toLowerCase();
     return (
       order.po_number?.toLowerCase().includes(query) ||
       order.contract_no?.toLowerCase().includes(query) ||
-      order.remarks?.toLowerCase().includes(query)||
-      (order.inverter_name || '').toLowerCase().includes(searchQuery.toLowerCase())||
-      (order.generator_no || '').toLowerCase().includes(query) ||   
+      order.remarks?.toLowerCase().includes(query) ||
+      (order.inverter_name || '').toLowerCase().includes(query) ||
+      (order.generator_no || '').toLowerCase().includes(query) ||
       (order.location_name || '').toLowerCase().includes(query) ||
-      (order.client_name || '').toLowerCase().includes(query)  
+      (order.client_name || '').toLowerCase().includes(query)
     );
   });
 
-
   const handleOffhire = async (id) => {
-  if (!window.confirm('Are you sure you want to offhire this PO?')) return;
-  try {
-    await axiosInstance.post(`/orders/${id}/offhire/`);
-    alert('PO offhired successfully');
-    fetchOrders(currentPage);
-  } catch (error) {
-    console.error('Error offhiring order:', error);
-    alert('Failed to offhire PO');
-  }
-};
+    if (!window.confirm('Are you sure you want to offhire this PO?')) return;
+    try {
+      await axiosInstance.post(`/orders/${id}/offhire/`);
+      alert('PO offhired successfully');
+      fetchOrders(currentPage);
+    } catch (error) {
+      console.error('Error offhiring order:', error);
+      alert('Failed to offhire PO');
+    }
+  };
 
-const handleSort = (key) => {
+  const handleSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
       direction = 'desc';
@@ -182,7 +222,6 @@ const handleSort = (key) => {
 
     let valA, valB;
 
-    // Special case: SI No uses id
     if (sortConfig.key === 'serial') {
       valA = a.id;
       valB = b.id;
@@ -191,7 +230,6 @@ const handleSort = (key) => {
       valB = b[sortConfig.key] || '';
     }
 
-    // Convert dates properly
     if (sortConfig.key === 'start_date' || sortConfig.key === 'end_date') {
       valA = new Date(valA);
       valB = new Date(valB);
@@ -202,17 +240,14 @@ const handleSort = (key) => {
     return 0;
   });
 
-  // Sort icons
   const getSortIcon = (key) => {
     if (sortConfig.key !== key) return '⇅';
     return sortConfig.direction === 'asc' ? '↑' : '↓';
   };
 
-
   return (
-<div className="w-full ml-[100px] flex justify-start" style={{ width: "120%" }}>
-  <MDBCard className="card shadow-sm mb-4" style={{ width: "100%" }}>
-
+    <div className="w-full ml-[100px] flex justify-start" style={{ width: '120%' }}>
+      <MDBCard className="card shadow-sm mb-4" style={{ width: '100%' }}>
         <MDBCardBody>
           <MDBCardTitle className="text-primary fw-bold fs-4 mb-3">
             📦 Admin PO List
@@ -230,27 +265,77 @@ const handleSort = (key) => {
             <p className="text-muted text-center">No POs found.</p>
           ) : (
             <div className="overflow-x-auto">
-              <MDBTable hover bordered align="middle" sclassName="text-center"
-              style={{ tableLayout: "fixed", width: "100%", fontSize: "0.85rem" }}>
-                <MDBTableHead light>
-                  <tr>
-                            <th onClick={() => handleSort('serial')} style={{ cursor: 'pointer',width: "5%" }}>SI No {getSortIcon('serial')}</th>
-                            <th onClick={() => handleSort('po_number')} style={{ cursor: 'pointer' ,width: "10%" }}>PO Number {getSortIcon('po_number')}</th>
-                            <th onClick={() => handleSort('contract_no')} style={{ cursor: 'pointer' ,width: "10%" }}>Contract No{getSortIcon('contract_no')}</th>
-                            <th onClick={() => handleSort('inverter_name')} style={{ cursor: 'pointer' , width: "15%" }}>Inverter Number {getSortIcon('inverter_name')}</th>
-                            <th onClick={() => handleSort('client_name')} style={{ cursor: 'pointer',width: "12%" }}>Client Name {getSortIcon('client_name')}</th>
-                            <th onClick={() => handleSort('location_name')} style={{ cursor: 'pointer',width: "10%" }}>Location  {getSortIcon('location_name')}</th>
-                            <th onClick={() => handleSort('start_date')} style={{ cursor: 'pointer', width: "10%" }}>Start Date  {getSortIcon('start_date')}</th>
-                            <th onClick={() => handleSort('end_date')} style={{ cursor: 'pointer' ,width: "10%" }}>End Date  {getSortIcon('end_date')}</th>
-                            <th onClick={() => handleSort('generator_no')} style={{ cursor: 'pointer' , width: "10%" }}>Generator{getSortIcon('generator_no')}</th>
-                            <th style={{ width: "10%" }}>Site Contact</th>
-                            <th style={{ width: "10%" }}>Remarks</th>
-                            <th style={{ width: "12%" }}>Created By</th> 
-                            <th style={{ width: "7%" }}>Edit</th>
-                            <th style={{ width: "7%" }}>Delete</th>
-                            <th style={{ width: "7%" }}>Offhire</th>
-                          </tr>
-                </MDBTableHead>
+              <MDBTable
+                hover
+                bordered
+                align="middle"
+                style={{ tableLayout: 'fixed', width: '100%', fontSize: '0.85rem' }}
+              >
+               <MDBTableHead light>
+                                <tr>
+                                  <th style={{ width: '5%' }}>SI No</th>
+                                  <th
+                                    style={{ width: '10%', cursor: 'pointer' }}
+                                    onClick={() => handleSort('po_number')}
+                                  >
+                                    PO Number {getSortIcon('po_number')}
+                                  </th>
+                                  <th
+                                    style={{ width: '10%', cursor: 'pointer' }}
+                                    onClick={() => handleSort('contract_no')}
+                                  >
+                                    Contract No {getSortIcon('contract_no')}
+                                  </th>
+                                  <th
+                                    style={{ width: '15%', cursor: 'pointer' }}
+                                    onClick={() => handleSort('inverter_name')}
+                                  >
+                                    Inverter {getSortIcon('inverter_name')}
+                                  </th>
+                                  <th
+                                    style={{ width: '12%', cursor: 'pointer' }}
+                                    onClick={() => handleSort('client_name')}
+                                  >
+                                    Client {getSortIcon('client_name')}
+                                  </th>
+                                  <th
+                                    style={{ width: '10%', cursor: 'pointer' }}
+                                    onClick={() => handleSort('location_name')}
+                                  >
+                                    Location {getSortIcon('location_name')}
+                                  </th>
+                                  <th
+                                    style={{ width: '10%', cursor: 'pointer' }}
+                                    onClick={() => handleSort('start_date')}
+                                  >
+                                    Start Date {getSortIcon('start_date')}
+                                  </th>
+                                  <th
+                                    style={{ width: '10%', cursor: 'pointer' }}
+                                    onClick={() => handleSort('end_date')}
+                                  >
+                                    End Date {getSortIcon('end_date')}
+                                  </th>
+                                  <th
+                                    style={{ width: '10%', cursor: 'pointer' }}
+                                    onClick={() => handleSort('generator_no')}
+                                  >
+                                    Generator {getSortIcon('generator_no')}
+                                  </th>
+                                  <th
+                                    style={{ width: '10%', cursor: 'pointer' }}
+                                    onClick={() => handleSort('site_contact_name')}
+                                  >
+                                    Site Contact {getSortIcon('site_contact_name')}
+                                  </th>
+                                  <th style={{ width: '10%' }}>Remarks</th>
+                                  <th style={{ width: '12%' }}>Created By</th>
+                                  <th style={{ width: '7%' }}>Edit</th>
+                                  <th style={{ width: '7%' }}>Delete</th>
+                                  <th style={{ width: '7%' }}>Offhire</th>
+                                </tr>
+                              </MDBTableHead>
+
                 <MDBTableBody>
                   {sortedOrders.map((order, index) => {
                     const serial = (currentPage - 1) * pageSize + index + 1;
@@ -260,16 +345,34 @@ const handleSort = (key) => {
                           <>
                             <td>{serial}</td>
                             <td>
-                              <input name="po_number" className="form-control"
-                                value={editData.po_number} onChange={handleChange} />
+                              <input
+                                name="po_number"
+                                className={`form-control ${errors.po_number ? 'is-invalid' : ''}`}
+                                value={editData.po_number || ''}
+                                onChange={handleChange}
+                              />
+                              {errors.po_number && (
+                                <div className="invalid-feedback">{errors.po_number}</div>
+                              )}
                             </td>
                             <td>
-                              <input name="contract_no" className="form-control"
-                                value={editData.contract_no} onChange={handleChange} />
+                              <input
+                                name="contract_no"
+                                className={`form-control ${errors.contract_no ? 'is-invalid' : ''}`}
+                                value={editData.contract_no || ''}
+                                onChange={handleChange}
+                              />
+                              {errors.contract_no && (
+                                <div className="invalid-feedback">{errors.contract_no}</div>
+                              )}
                             </td>
                             <td>
-                              <select name="inverter" className="form-select"
-                                value={editData.inverter} onChange={handleChange}>
+                              <select
+                                name="inverter"
+                                className="form-select"
+                                value={editData.inverter || ''}
+                                onChange={handleChange}
+                              >
                                 <option value="">Select</option>
                                 {inverters.map((inv) => (
                                   <option key={inv.id} value={inv.id}>
@@ -279,12 +382,20 @@ const handleSort = (key) => {
                               </select>
                             </td>
                             <td>
-                              <input name="client_name" className="form-control"
-                                value={editData.client_name || ''} disabled />
+                              <input
+                                name="client_name"
+                                className="form-control"
+                                value={editData.client_name || ''}
+                                disabled
+                              />
                             </td>
                             <td>
-                              <select name="location" className="form-select"
-                                value={editData.location} onChange={handleChange}>
+                              <select
+                                name="location"
+                                className="form-select"
+                                value={editData.location || ''}
+                                onChange={handleChange}
+                              >
                                 <option value="">Select</option>
                                 {locations.map((loc) => (
                                   <option key={loc.id} value={loc.id}>
@@ -294,16 +405,33 @@ const handleSort = (key) => {
                               </select>
                             </td>
                             <td>
-                              <input name="start_date" type="date" className="form-control"
-                                value={editData.start_date} onChange={handleChange} />
+                              <input
+                                name="start_date"
+                                type="date"
+                                className="form-control"
+                                value={editData.start_date || ''}
+                                onChange={handleChange}
+                              />
                             </td>
                             <td>
-                              <input name="end_date" type="date" className="form-control"
-                                value={editData.end_date || ""} onChange={handleChange} />
+                              <input
+                                name="end_date"
+                                type="date"
+                                className={`form-control ${errors.end_date ? 'is-invalid' : ''}`}
+                                value={editData.end_date || ''}
+                                onChange={handleChange}
+                              />
+                              {errors.end_date && (
+                                <div className="invalid-feedback">{errors.end_date}</div>
+                              )}
                             </td>
                             <td>
-                              <select name="generator" className="form-select"
-                                value={editData.generator} onChange={handleChange}>
+                              <select
+                                name="generator"
+                                className="form-select"
+                                value={editData.generator || ''}
+                                onChange={handleChange}
+                              >
                                 <option value="">Select</option>
                                 {generators.map((gen) => (
                                   <option key={gen.id} value={gen.id}>
@@ -313,8 +441,12 @@ const handleSort = (key) => {
                               </select>
                             </td>
                             <td>
-                              <select name="site_contact" className="form-select"
-                                value={editData.site_contact} onChange={handleChange}>
+                              <select
+                                name="site_contact"
+                                className="form-select"
+                                value={editData.site_contact || ''}
+                                onChange={handleChange}
+                              >
                                 <option value="">Select</option>
                                 {siteContacts.map((sc) => (
                                   <option key={sc.id} value={sc.id}>
@@ -324,36 +456,59 @@ const handleSort = (key) => {
                               </select>
                             </td>
                             <td>
-                                    <input
-                                      name="created_by"
-                                      className="form-control"
-                                      value={editData.created_by || ''}
-                                      disabled
-                                    />
+                              <input
+                                name="remarks"
+                                className={`form-control ${errors.remarks ? 'is-invalid' : ''}`}
+                                value={editData.remarks || ''}
+                                onChange={handleChange}
+                              />
+                              {errors.remarks && (
+                                <div className="invalid-feedback">{errors.remarks}</div>
+                              )}
                             </td>
+                            <td>
+                              <input
+                                name="created_by"
+                                className="form-control"
+                                value={editData.created_by || ''}
+                                disabled
+                              />
+                            </td>
+                          <td colSpan={3}>
+                                <MDBBtn size="sm" color="success" onClick={handleSave} className="me-2">
+                                  Save
+                                </MDBBtn>
+                                <MDBBtn
+                                  size="sm"
+                                  color="secondary"
+                                  onClick={() => {
+                                    setEditingId(null);
+                                    setEditData({});
+                                    setErrors({});
+                                  }}
+                                >
+                                  Cancel
+                                </MDBBtn>
+                              </td>
 
                             <td>
-                              <input name="remarks" className="form-control"
-                                value={editData.remarks} onChange={handleChange} />
+                              <MDBBtn
+                                size="sm"
+                                color="danger"
+                                onClick={() => handleDelete(order.id)}
+                              >
+                                Delete
+                              </MDBBtn>
                             </td>
                             <td>
-                              <MDBBtn size="sm" color="success" onClick={handleSave}>Save</MDBBtn>
+                              <MDBBtn
+                                className="offhire-btn me-1"
+                                size="sm"
+                                onClick={() => handleOffhire(order.id)}
+                              >
+                                <i className="fas fa-power-off"></i>
+                              </MDBBtn>
                             </td>
-                            <td>
-                              <MDBBtn size="sm" color="danger"
-                                onClick={() => handleDelete(order.id)}>Delete</MDBBtn>
-                            </td>
-                            <td>
-                                  <MDBBtn
-                                   
-                                    className="offhire-btn me-1"
-                                    size="sm"
-                                   
-                                    onClick={() => handleOffhire(order.id)}
-                                  >
-                                     <i className="fas fa-power-off"></i>
-                                  </MDBBtn>
-                                </td>
                           </>
                         ) : (
                           <>
@@ -369,36 +524,34 @@ const handleSort = (key) => {
                             <td>{order.site_contact_name || 'N/A'}</td>
                             <td>{order.remarks}</td>
                             <td>{order.created_by || 'N/A'}</td>
-
                             <td>
-                              <MDBBtn size="sm" color="info" className="text-white"
-                                onClick={() => handleEdit(order)}>
-                               <i className="fas fa-pen"></i>
-
+                              <MDBBtn
+                                size="sm"
+                                color="info"
+                                className="text-white"
+                                onClick={() => handleEdit(order)}
+                              >
+                                <i className="fas fa-pen"></i>
                               </MDBBtn>
                             </td>
-                           <td>
-                                <MDBBtn
-                                  size="sm"
-                                  color="danger"
-                                  onClick={() => handleDelete(order.id)}
-                                >
-                                  <i className="fas fa-trash"></i>
-                                </MDBBtn>
-                              </td>
-                              <td>
-                                <MDBBtn
+                            <td>
+                              <MDBBtn
+                                size="sm"
+                                color="danger"
+                                onClick={() => handleDelete(order.id)}
+                              >
+                                <i className="fas fa-trash"></i>
+                              </MDBBtn>
+                            </td>
+                            <td>
+                              <MDBBtn
                                 className="offhire-btn me-1"
-                                  size="sm"
-
-                                  onClick={() => handleOffhire(order.id)}
-                                >
-                                    <i className="fas fa-power-off"></i> 
-
-                                </MDBBtn>
-                              </td>
-
-
+                                size="sm"
+                                onClick={() => handleOffhire(order.id)}
+                              >
+                                <i className="fas fa-power-off"></i>
+                              </MDBBtn>
+                            </td>
                           </>
                         )}
                       </tr>
@@ -413,11 +566,26 @@ const handleSort = (key) => {
 
       <div className="d-flex justify-content-between align-items-center mt-3">
         <p className="text-muted">
-          Showing {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, count)} of {count}
+          Showing {(currentPage - 1) * pageSize + 1} -{' '}
+          {Math.min(currentPage * pageSize, count)} of {count}
         </p>
         <div className="d-flex gap-2">
-          <MDBBtn size="sm" color="light" disabled={!prevPage} onClick={goToPrevPage}>⬅ Prev</MDBBtn>
-          <MDBBtn size="sm" color="light" disabled={!nextPage} onClick={goToNextPage}>Next ➡</MDBBtn>
+          <MDBBtn
+            size="sm"
+            color="light"
+            disabled={!prevPage}
+            onClick={goToPrevPage}
+          >
+            ⬅ Prev
+          </MDBBtn>
+          <MDBBtn
+            size="sm"
+            color="light"
+            disabled={!nextPage}
+            onClick={goToNextPage}
+          >
+            Next ➡
+          </MDBBtn>
         </div>
       </div>
     </div>

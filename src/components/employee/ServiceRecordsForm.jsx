@@ -48,6 +48,16 @@ const ServiceRecordsForm = ({ token }) => {
     }
     return "";
   };
+const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+const handleSort = (key) => {
+  setSortConfig((prev) => {
+    if (prev.key === key) {
+      return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+    }
+    return { key, direction: 'asc' };
+  });
+};
+
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -116,6 +126,23 @@ const ServiceRecordsForm = ({ token }) => {
       })
       .catch((err) => console.error("Error:", err.response?.data || err.message));
   };
+  const sortedRecords = [...records].sort((a, b) => {
+  if (!sortConfig.key) return 0;
+
+  let valA, valB;
+
+  if (sortConfig.key === "date_of_service") {
+    valA = new Date(a.date_of_service);
+    valB = new Date(b.date_of_service);
+  } else {
+    valA = a[sortConfig.key] || "";
+    valB = b[sortConfig.key] || "";
+  }
+
+  if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+  if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+  return 0;
+});
 
   const handleEdit = (record) => {
     setFormData({
@@ -311,26 +338,33 @@ const ServiceRecordsForm = ({ token }) => {
 
       <div className="table-responsive">
         <table className="table table-striped table-bordered text-center">
-          <thead className="table-light">
-            <tr>
-              <th>Token</th>
-              <th>Inverter</th>
-              <th>Service Date</th>
-              <th>Problem</th>
-              <th>Repair</th>
-              <th>Status</th>
-              <th>Distance Travelled</th>
-              <th>Hours on Travel</th>
-              <th>Warranty Claim</th>
-              <th>Hours on Site</th>
-              <th>Base</th>
-              <th>Service Location</th>
-              <th>Edit</th>
-              <th>Delete</th>
-            </tr>
-          </thead>
+         <thead className="table-light">
+              <tr>
+                <th onClick={() => handleSort("service_token_number")} style={{ cursor: "pointer" }}>
+                  Token {sortConfig.key === "service_token_number" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
+                </th>
+                <th onClick={() => handleSort("inverter_name")} style={{ cursor: "pointer" }}>
+                  Inverter {sortConfig.key === "inverter_name" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
+                </th>
+                <th onClick={() => handleSort("date_of_service")} style={{ cursor: "pointer" }}>
+                  Service Date {sortConfig.key === "date_of_service" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
+                </th>
+                <th>Problem</th>
+                <th>Repair</th>
+                <th>Status</th>
+                <th>Distance Travelled</th>
+                <th>Hours on Travel</th>
+                <th>Warranty Claim</th>
+                <th>Hours on Site</th>
+                <th>Base</th>
+                <th>Service Location</th>
+                <th>Edit</th>
+                <th>Delete</th>
+              </tr>
+            </thead>
+
           <tbody>
-            {records.map((record) => (
+            {sortedRecords.map((record) => (
               <tr key={record.id}>
                 <td>{record.service_token_number}</td>
                 <td>{record.inverter_name}</td>
