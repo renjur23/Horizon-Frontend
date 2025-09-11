@@ -54,27 +54,28 @@ const InverterList = () => {
   };
 
   const validationRules = {
-    unit_id: {
-      regex: /^[A-Z]{3}\s*-\s*\d{3}\/\d{3}-\d{3}$/,
-      example: 'HZE - 176/300-079',
-    },
-    model: {
-      regex: /^\d{3}\/\d{3}$/,
-      example: '176/300',
-    },
-    given_name: {
-      regex: /^[A-Z0-9\s/]+$/,
-      example: 'H79 176/300ALLYE UNIT',
-    },
-    serial_no: {
-      regex: /^(?:\d*|NIL)$/,
-      example: '123456789 OR NIL',
-    },
-    remarks: {
-      regex: /^[A-Za-z0-9\s]*$/,
-      example: 'Alphanumeric only',
-    },
-  };
+  unit_id: {
+  regex: /^[A-Z]{3}\s*-\s*\d{2,5}\/\d{2,5}(?:-\d{2,5}){0,2}$/,
+  example: "HZE - 176/300-079, HZE-10/46, or HZE-10/46-062",
+},
+
+  model: {
+    regex: /^\d{2,5}\/\d{2,5}$/,
+    example: "176/300 or 10/46",
+  },
+  given_name: {
+    regex: /^[A-Za-z0-9\s/-]+$/,
+    example: "H79 176/300ALLYE UNIT or H61 JCB 10/46 2422058",
+  },
+  serial_no: {
+    regex: /^(?:\d*|NIL)$/,
+    example: "123456789 or NIL",
+  },
+  remarks: {
+    regex: /^[A-Za-z0-9\s/-]*$/,
+    example: "Alphanumeric with spaces, / or -",
+  },
+};
 
   const validateField = (name, value) => {
     if (validationRules[name]) {
@@ -115,7 +116,7 @@ const InverterList = () => {
     setEditingId(inverter.id);
     setEditData({
       ...inverter,
-      inverter_status_input: inverter.inverter_status?.inverter_status_name || '',
+      inverter_status_input:  inverter.inverter_status?.id || '', 
     });
     setEditErrors({});
   };
@@ -147,7 +148,7 @@ const InverterList = () => {
         given_name: editData.given_name,
         given_start_name: editData.given_start_name,
         serial_no: editData.serial_no,
-        inverter_status_input: editData.inverter_status_input,
+        inverter_status_input: statuses.find(s => s.id === parseInt(editData.inverter_status))?.inverter_status_name || "",
         remarks: editData.remarks,
       };
 
@@ -167,21 +168,19 @@ const InverterList = () => {
     setEditErrors({});
   };
 
-  const handleDelete = async (id) => {
-    const confirmDelete = window.confirm(
-      'Are you sure you want to delete this inverter?'
-    );
-    if (!confirmDelete) return;
+const handleDelete = async (id) => {
+  const confirmDelete = window.confirm('Are you sure you want to delete this inverter?');
+  if (!confirmDelete) return;
 
-    try {
-      await axiosInstance.delete(`/inverters/${id}/`);
-      alert('Inverter deleted successfully');
-      fetchInverters(currentPage);
-    } catch (error) {
-      console.error('Delete failed', error);
-      alert('Delete failed');
-    }
-  };
+  try {
+    await axiosInstance.delete(`/inverters/${id}/`);
+    alert('Inverter deleted successfully');
+    fetchInverters(currentPage);
+  } catch (error) {
+    console.error('Delete failed', error.response?.data || error);
+    alert(`Delete failed: ${JSON.stringify(error.response?.data)}`);
+  }
+};
 
   const goToNextPage = () => {
     const totalPages = Math.ceil(count / pageSize);
@@ -315,18 +314,19 @@ const InverterList = () => {
                             </td>
                             <td>
                               <select
-                                name="inverter_status_input"
-                                value={editData.inverter_status_input}
-                                onChange={handleChange}
-                                className="form-select"
-                              >
-                                <option value="">Select Status</option>
-                                {statuses.map((status) => (
-                                  <option key={status.id} value={status.inverter_status_name}>
-                                    {status.inverter_status_name}
-                                  </option>
-                                ))}
-                              </select>
+                                  name="inverter_status"
+                                  value={editData.inverter_status || ""}
+                                  onChange={handleChange}
+                                  className="form-select"
+                                >
+                                  <option value="">Select Status</option>
+                                  {statuses.map((status) => (
+                                    <option key={status.id} value={status.id}>
+                                      {status.inverter_status_name}
+                                    </option>
+                                  ))}
+                                </select>
+
                             </td>
                             <td>
                               <input
@@ -366,13 +366,13 @@ const InverterList = () => {
                               >
                                 <i className="fas fa-pen"></i>
                               </MDBBtn>
-                              <MDBBtn
+                              {/* <MDBBtn
                                 size="sm"
                                 color="danger"
                                 onClick={() => handleDelete(inv.id)}
                               >
                                 <i className="fas fa-trash"></i>
-                              </MDBBtn>
+                              </MDBBtn> */}
                             </td>
                           </>
                         )}

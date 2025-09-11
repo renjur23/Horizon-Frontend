@@ -333,7 +333,7 @@ doc.text(`Inverter: ${inverterDetails.trim() || "-"}`, 120, 34);
             <th>No</th>
             <th>Date</th>
             <th>Inverter</th>
-            <th>PO</th>
+            <th>PO Number</th>
             <th>kW</th>
             <th>Gen Hr</th>
             <th>Site Hr</th>
@@ -350,7 +350,7 @@ doc.text(`Inverter: ${inverterDetails.trim() || "-"}`, 120, 34);
               <td>{(currentPage - 1) * itemsPerPage + i + 1}</td>
               <td>{new Date(u.date).toLocaleDateString("en-GB")}</td>
               <td>{formatInverter(u.inverter_display)}</td>
-              <td>{formatPO(u.order_display)}</td>
+              <td>{u.po_number || "-"}</td>
               <td>{u.kw_consumed}</td>
               <td>{u.generator_run_hour}</td>
               <td>{u.site_run_hour}</td>

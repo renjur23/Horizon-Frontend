@@ -36,8 +36,8 @@ const InverterSimDetailList = () => {
   // Validation rules
   const validationRules = {
     phone_number: {
-      regex: /^\d{10,15}$/,
-      example: '10–15 digits only',
+      regex: /^\d{5,15}$/,
+      example: '5–15 digits only',
     },
     serial_no: {
       regex: /^\d+$/,
@@ -48,7 +48,7 @@ const InverterSimDetailList = () => {
     example: 'Alphanumeric with hyphen (e.g., User-1)',
   },
     remarks: {
-      regex: /^[A-Za-z0-9\s!@#$%^&*(),.?":{}|<>_-]*$/,
+      regex: /^[A-Za-z0-9\s!@#$%^&*(),/.?":{}|<>_-]*$/,
       example: 'Alphanumeric + spaces + special characters',
     },
   };

@@ -29,10 +29,17 @@ const ServiceRecordsForm = ({ token }) => {
   // ✅ Regex rules
   const validationRules = {
     service_token_number: { regex: /^\d+$/, example: "Numeric only (e.g., 12345)" },
-    problem: { regex: /^[A-Za-z0-9\s]+$/, example: "Alphanumeric only" },
+    problem: {
+  regex: /^[A-Za-z0-9\s.,!@#\$%\^&\*\(\)\-_+=:;'"?/\\|<>`~]+$/,
+  example: "Letters, numbers, spaces, and symbols allowed"
+   },
     repair_done: { regex: /^[A-Za-z\s]+$/, example: "Letters and spaces only" },
-    distance_travelled: { regex: /^\d+$/, example: "Numeric only (e.g., 100)" },
-    hours_spent_on_travel: { regex: /^\d+$/, example: "Numeric only (e.g., 5)" },
+   distance_travelled: {
+  regex: /^\d+(\.\d+)?$/,
+  example: "Numeric (integer or decimal, e.g., 100 or 15.6)"
+},
+
+  hours_spent_on_travel: { regex: /^\d+$/, example: "Numeric only (e.g., 5)" },
     warranty_claim: { regex: /^[A-Za-z0-9\s]+$/, example: "Alphanumeric (e.g., Yes123)" },
     hours_spent_on_site: { regex: /^\d+$/, example: "Numeric only (e.g., 8)" },
     base: { regex: /^[A-Za-z0-9\s]+$/, example: "Alphanumeric only" },
@@ -154,6 +161,24 @@ const handleSort = (key) => {
     setEditingId(record.id);
   };
 
+  const handleDelete = (id) => {
+  if (!window.confirm("Are you sure you want to delete this record?")) return;
+
+  axiosInstance
+    .delete(`service-records/${id}/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .then(() => {
+      alert("🗑️ Record deleted successfully");
+      fetchRecords(currentPage);
+    })
+    .catch((err) => {
+      console.error("Delete error:", err.response?.data || err.message);
+      alert("❌ Failed to delete record");
+    });
+};
+
+
   return (
     <div className="container my-4">
       <h2 className="h4 mb-4">🔧 Add or Update Service Record</h2>
@@ -245,7 +270,7 @@ const handleSort = (key) => {
             </tr>
 
             <tr>
-              <td><label>Distance Travelled</label></td>
+              <td><label>Distance Travelled (Km)</label></td>
               <td>
                 <input
                   name="distance_travelled"
@@ -257,7 +282,7 @@ const handleSort = (key) => {
                   <div className="invalid-feedback">{formErrors.distance_travelled}</div>
                 )}
               </td>
-              <td><label>Hours on Travel</label></td>
+              <td><label>Hours on Travel (Hrs)</label></td>
               <td>
                 <input
                   name="hours_spent_on_travel"
@@ -284,7 +309,7 @@ const handleSort = (key) => {
                   <div className="invalid-feedback">{formErrors.warranty_claim}</div>
                 )}
               </td>
-              <td><label>Hours on Site</label></td>
+              <td><label>Hours on Site (Hrs)</label></td>
               <td>
                 <input
                   name="hours_spent_on_site"
@@ -352,10 +377,10 @@ const handleSort = (key) => {
                 <th>Problem</th>
                 <th>Repair</th>
                 <th>Status</th>
-                <th>Distance Travelled</th>
-                <th>Hours on Travel</th>
+                <th>Distance Travelled (KM)</th>
+                <th>Hours on Travel(Hr)</th>
                 <th>Warranty Claim</th>
-                <th>Hours on Site</th>
+                <th>Hours on Site(Hr)</th>
                 <th>Base</th>
                 <th>Service Location</th>
                 <th>Edit</th>
