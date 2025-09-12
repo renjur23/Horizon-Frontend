@@ -148,7 +148,7 @@ const InverterList = () => {
         given_name: editData.given_name,
         given_start_name: editData.given_start_name,
         serial_no: editData.serial_no,
-        inverter_status_input: statuses.find(s => s.id === parseInt(editData.inverter_status))?.inverter_status_name || "",
+        inverter_status_input: statuses.find(s => s.id === editData.inverter_status)?.inverter_status_name || "",
         remarks: editData.remarks,
       };
 

@@ -24,8 +24,8 @@ const GeneratorList = () => {
   const pageSize = 20;
 
   // regex rules
-  const generatorNoRegex = /^[A-Z]{2,5}-\d{2}$/; // e.g., ABM-01
-  const numberRegex = /^[0-9]+$/;
+ const generatorNoRegex = /^[A-Z]{1,3}\d{0,3}[A-Z]?(?:-?\d{1,3})?$/;
+ const numberRegex = /^[0-9]+$/;
 
   // Fetch generators
   const fetchGenerators = async (page = 1) => {
